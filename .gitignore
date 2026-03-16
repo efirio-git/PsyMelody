@@ -1,0 +1,28 @@
+# Build directories
+build/
+build2/
+build_uni/
+
+# Package output
+Package/
+
+# IDE files
+.vscode/
+.idea/
+*.xcodeproj/
+*.xcworkspace/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Unused generated images
+Resources/background.png
+Resources/header.png
+Resources/panel.png
+Resources/knob_strip.png
+Resources/btn_generate_*.png
+Resources/section_line.png
+
+# Extracted system fonts (not needed)
+Resources/Fonts/Avenir_Next_*
