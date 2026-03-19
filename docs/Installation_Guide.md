@@ -10,10 +10,11 @@
 1. Open `PsyMelody_v0.1.0.dmg`
 2. Double-click `PsyMelody_Installer.pkg`
 3. Follow the on-screen instructions
-4. The installer will place:
-   - **VST3 Plugin** → `/Library/Audio/Plug-Ins/VST3/`
-   - **Audio Unit Plugin** → `/Library/Audio/Plug-Ins/Components/`
-5. Restart your DAW
+4. Click **Customize** to select which formats to install:
+   - **VST3 Plugin** → `/Library/Audio/Plug-Ins/VST3/` (FL Studio, Ableton, Cubase, etc.)
+   - **Audio Unit Plugin** → `/Library/Audio/Plug-Ins/Components/` (Logic Pro, GarageBand)
+5. Click Install
+6. Restart your DAW
 
 ### Uninstalling
 

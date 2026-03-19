@@ -10,10 +10,11 @@
 1. `PsyMelody_v0.1.0.dmg` を開く
 2. `PsyMelody_Installer.pkg` をダブルクリック
 3. 画面の指示に従ってインストール
-4. 以下がインストールされます:
-   - **VST3 Plugin** → `/Library/Audio/Plug-Ins/VST3/`
-   - **Audio Unit Plugin** → `/Library/Audio/Plug-Ins/Components/`
-5. DAWを再起動
+4. **カスタマイズ** をクリックしてインストールするフォーマットを選択:
+   - **VST3 Plugin** → `/Library/Audio/Plug-Ins/VST3/`（FL Studio, Ableton, Cubase等）
+   - **Audio Unit Plugin** → `/Library/Audio/Plug-Ins/Components/`（Logic Pro, GarageBand）
+5. インストールをクリック
+6. DAWを再起動
 
 ### アンインストール
 
