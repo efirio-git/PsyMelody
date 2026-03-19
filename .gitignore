@@ -5,6 +5,9 @@ build_uni/
 
 # Package output
 Package/
+installer/
+*.dmg
+*.pkg
 
 # IDE files
 .vscode/
