@@ -50,6 +50,7 @@ public:
     double getPlaybackPositionBeats() const { return playbackPosition.load(); }
     double getPhraseLengthBeats() const { return patternEngine.getPhraseLengthBeats(); }
     bool isCurrentlyPlaying() const { return playing.load(); }
+    double getDawBpm() const { return dawBpm.load(); }
 
     // Editing interface
     void updatePhrase(const std::vector<PsyMelody::NoteEvent>& phrase);
@@ -84,6 +85,7 @@ private:
     double currentSampleRate = 44100.0;
     std::atomic<double> playbackPosition{0.0};
     std::atomic<bool> playing{false};
+    std::atomic<double> dawBpm{0.0};  // 0 = no DAW BPM available
 
     // Undo/Redo history
     std::vector<std::vector<PsyMelody::NoteEvent>> undoHistory;

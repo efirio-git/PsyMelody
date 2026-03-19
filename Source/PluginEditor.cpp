@@ -769,6 +769,14 @@ bool PianoRollView::keyPressed(const juce::KeyPress& key)
 void PianoRollView::timerCallback()
 {
     if (processor && processor->isCurrentlyPlaying()) repaint();
+    // Sync DAW BPM to UI
+    if (processor && onDawBpmChanged) {
+        double dBpm = processor->getDawBpm();
+        if (dBpm > 0 && dBpm != lastDawBpm) {
+            lastDawBpm = dBpm;
+            onDawBpmChanged(dBpm);
+        }
+    }
 }
 
 // ============================================================
@@ -979,6 +987,10 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         double visibleH = (double)pianoRoll.getHeight();
         vScrollBar.setRangeLimits(0.0, totalH, juce::dontSendNotification);
         vScrollBar.setCurrentRange(pianoRoll.getScrollY(), visibleH, juce::dontSendNotification);
+    };
+    pianoRoll.onDawBpmChanged = [this](double dBpm) {
+        bpmSlider.setValue(dBpm, juce::dontSendNotification);
+        psyProcessor.getGeneratorParams().bpm = (float)dBpm;
     };
     addAndMakeVisible(pianoRoll);
 
@@ -1532,6 +1544,15 @@ void PsyMelodyEditor::loadPreset(int index)
         psyProcessor.generateNewPhrase();
     }
     updatePianoRoll();
+    // Sync BPM from DAW if available
+    if (auto* ph = psyProcessor.getPlayHead()) {
+        if (auto pos = ph->getPosition()) {
+            if (auto b = pos->getBpm()) {
+                bpmSlider.setValue(*b, juce::dontSendNotification);
+                psyProcessor.getGeneratorParams().bpm = (float)*b;
+            }
+        }
+    }
     resized();
     repaint();
 }

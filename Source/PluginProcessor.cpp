@@ -35,8 +35,10 @@ void PsyMelodyProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     if (!posInfo.hasValue()) return;
 
     double bpm = genParams.bpm;
-    if (auto bpmOpt = posInfo->getBpm())
+    if (auto bpmOpt = posInfo->getBpm()) {
         bpm = *bpmOpt;
+        dawBpm.store(bpm);
+    }
 
     double ppq = 0.0;
     if (auto ppqOpt = posInfo->getPpqPosition())
