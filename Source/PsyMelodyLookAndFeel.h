@@ -286,19 +286,21 @@ public:
                            bool shouldDrawButtonAsHighlighted, bool /*shouldDrawButtonAsDown*/) override
     {
         auto bounds = button.getLocalBounds().toFloat();
-        auto toggleArea = bounds.removeFromLeft(bounds.getHeight()).reduced(4.0f);
+        bool isPreview = button.getComponentID() == "preview_toggle";
+        float reduce = isPreview ? 7.0f : 4.0f;
+        auto toggleArea = bounds.removeFromLeft(bounds.getHeight()).reduced(reduce);
 
         g.setColour(button.getToggleState() ? primary : surfaceContainerHigh);
         g.fillRect(toggleArea);
 
         if (button.getToggleState()) {
             g.setColour(juce::Colour(0xff005762));
-            auto tick = toggleArea.reduced(3.0f);
+            auto tick = toggleArea.reduced(isPreview ? 2.0f : 3.0f);
             juce::Path check;
             check.startNewSubPath(tick.getX(), tick.getCentreY());
             check.lineTo(tick.getCentreX() - 1, tick.getBottom() - 2);
             check.lineTo(tick.getRight(), tick.getY() + 2);
-            g.strokePath(check, juce::PathStrokeType(2.0f));
+            g.strokePath(check, juce::PathStrokeType(isPreview ? 1.5f : 2.0f));
         }
 
         g.setColour(onSurfaceVariant);
