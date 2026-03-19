@@ -254,6 +254,12 @@ public:
     }
 
     juce::Font getComboBoxFont(juce::ComboBox&) override { return uiFont.withHeight(12.0f); }
+
+    void positionComboBoxText(juce::ComboBox& box, juce::Label& label) override
+    {
+        label.setFont(getComboBoxFont(box));
+        label.setBounds(6, 0, box.getWidth() - 24, box.getHeight());
+    }
     juce::Font getPopupMenuFont() override { return uiFontRegular.withHeight(13.0f); }
 
     void getIdealPopupMenuItemSize(const juce::String& text, bool isSeparator,
