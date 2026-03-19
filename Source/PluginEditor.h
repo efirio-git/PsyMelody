@@ -73,6 +73,7 @@ public:
 
     std::function<void()> onNotesChanged;
     std::function<void()> onZoomScrollChanged;
+    std::function<void(double)> onDawBpmChanged;
 
     float getZoomX() const { return zoomX; }
     float getZoomY() const { return zoomY; }
@@ -91,6 +92,7 @@ private:
     int numBars = 4;
     int lowestNote = 127, highestNote = 0;
     float zoomX = 1.0f, zoomY = 1.0f, scrollX = 0.0f, scrollY = 0.0f;
+    double lastDawBpm = 0.0;
 
     // Selection state
     std::set<int> selectedNotes;
