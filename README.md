@@ -4,6 +4,8 @@
 
 PsyMelody is a MIDI generator plugin for Psytrance music production. It generates melodies, basslines, and chord voicings based on scales, chord progressions, and rhythm patterns characteristic of Psytrance subgenres.
 
+![PsyMelody Screenshot](docs/images/PsyMelody.png)
+
 ## Download
 
 **[Download PsyMelody v0.1.0](https://github.com/efirio-git/PsyMelody/releases/tag/v0.1.0)**
