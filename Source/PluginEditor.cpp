@@ -56,7 +56,7 @@ void ParamLaneView::paint(juce::Graphics& g)
     // Center line for Pan and Pitch
     if (laneType == LaneType::Pan || laneType == LaneType::Pitch) {
         float centerY = bounds.getHeight() * 0.5f;
-        g.setColour(juce::Colour(0xff555577));
+        g.setColour(juce::Colour(0xff48474d).withAlpha(0.5f));
         g.drawLine(0, centerY, bounds.getWidth(), centerY, 1.0f);
     }
 
@@ -106,7 +106,7 @@ void ParamLaneView::paint(juce::Graphics& g)
     }
 
     // Label
-    g.setColour(juce::Colour(0xff888899));
+    g.setColour(juce::Colour(0xffacaab1));
     g.setFont(juce::Font(9.0f));
     juce::String label;
     if (laneType == LaneType::Velocity) label = "VEL";
@@ -153,7 +153,86 @@ void ParamLaneView::mouseDrag(const juce::MouseEvent& e)
 // ============================================================
 // PianoRollView
 // ============================================================
-PianoRollView::PianoRollView() { setWantsKeyboardFocus(true); startTimerHz(30); }
+PianoRollView::PianoRollView()
+{
+    setWantsKeyboardFocus(true);
+    startTimerHz(30);
+
+    // Zoom overlay buttons (children of piano roll)
+    auto setupBtn = [this](juce::TextButton& b) {
+        b.setButtonText("");
+        b.setColour(juce::TextButton::buttonColourId, juce::Colour(0xbb131319));
+        b.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff81ecff));
+        addAndMakeVisible(b);
+    };
+    setupBtn(zoomOutXBtn); setupBtn(zoomInXBtn);
+    setupBtn(zoomOutYBtn); setupBtn(zoomInYBtn);
+    setupBtn(zoomFitBtn);
+
+    zoomOutXBtn.onClick = [this] { setZoomX(getZoomX() / 1.3f); };
+    zoomInXBtn.onClick  = [this] { setZoomX(getZoomX() * 1.3f); };
+    zoomOutYBtn.onClick = [this] { setZoomY(getZoomY() / 1.3f); };
+    zoomInYBtn.onClick  = [this] { setZoomY(getZoomY() * 1.3f); };
+    zoomFitBtn.onClick  = [this] { setZoomX(1); setZoomY(1); setScrollX(0); setScrollY(0); };
+}
+
+void PianoRollView::paintOverChildren(juce::Graphics& g)
+{
+    if (!zoomOutXBtn.isVisible()) return;
+
+    auto drawMagnifier = [&](juce::Rectangle<int> btn, bool isPlus) {
+        float cx = (float)btn.getCentreX();
+        float cy = (float)btn.getCentreY() - 1.0f;
+        float r = 5.5f;
+        float handleLen = 4.5f;
+
+        // Glass circle
+        g.setColour(cursorColour.withAlpha(0.7f));
+        g.drawEllipse(cx - r, cy - r, r * 2, r * 2, 1.3f);
+
+        // Handle
+        float hx = cx + r * 0.7f;
+        float hy = cy + r * 0.7f;
+        g.drawLine(hx, hy, hx + handleLen, hy + handleLen, 1.6f);
+
+        // +/- inside
+        g.setColour(cursorColour);
+        float s = r * 0.45f;
+        g.drawLine(cx - s, cy, cx + s, cy, 1.3f);
+        if (isPlus)
+            g.drawLine(cx, cy - s, cx, cy + s, 1.3f);
+    };
+
+    auto drawFitIcon = [&](juce::Rectangle<int> btn) {
+        float cx = (float)btn.getCentreX();
+        float cy = (float)btn.getCentreY();
+        float s = 4.5f;
+        g.setColour(cursorColour.withAlpha(0.7f));
+        // Four corner brackets
+        g.drawLine(cx - s, cy - s, cx - s + 3, cy - s, 1.2f);
+        g.drawLine(cx - s, cy - s, cx - s, cy - s + 3, 1.2f);
+        g.drawLine(cx + s, cy - s, cx + s - 3, cy - s, 1.2f);
+        g.drawLine(cx + s, cy - s, cx + s, cy - s + 3, 1.2f);
+        g.drawLine(cx - s, cy + s, cx - s + 3, cy + s, 1.2f);
+        g.drawLine(cx - s, cy + s, cx - s, cy + s - 3, 1.2f);
+        g.drawLine(cx + s, cy + s, cx + s - 3, cy + s, 1.2f);
+        g.drawLine(cx + s, cy + s, cx + s, cy + s - 3, 1.2f);
+    };
+
+    drawMagnifier(zoomOutXBtn.getBounds(), false);
+    drawMagnifier(zoomInXBtn.getBounds(), true);
+    drawMagnifier(zoomOutYBtn.getBounds(), false);
+    drawMagnifier(zoomInYBtn.getBounds(), true);
+    drawFitIcon(zoomFitBtn.getBounds());
+
+    // H / V labels
+    g.setColour(juce::Colour(0xffacaab1).withAlpha(0.6f));
+    g.setFont(juce::Font(8.0f, juce::Font::bold));
+    g.drawText("H", zoomOutXBtn.getX() - 11, zoomOutXBtn.getY(), 10, zoomOutXBtn.getHeight(),
+               juce::Justification::centred);
+    g.drawText("V", zoomOutYBtn.getX() - 11, zoomOutYBtn.getY(), 10, zoomOutYBtn.getHeight(),
+               juce::Justification::centred);
+}
 
 void PianoRollView::setNoteEvents(const std::vector<PsyMelody::NoteEvent>& events, int bars)
 {
@@ -207,8 +286,9 @@ int PianoRollView::noteAtY(float y) const
     return std::clamp(highestNote - (int)((y + scrollY) / nh), lowestNote, highestNote);
 }
 
-double PianoRollView::beatAtX(float x) const { return (double)((x + scrollX) / beatWidth()); }
-float PianoRollView::xForBeat(double beat) const { return (float)beat * beatWidth() - scrollX; }
+static constexpr float pianoLabelMargin = 28.0f;
+double PianoRollView::beatAtX(float x) const { return (double)((x - pianoLabelMargin + scrollX) / beatWidth()); }
+float PianoRollView::xForBeat(double beat) const { return (float)beat * beatWidth() - scrollX + pianoLabelMargin; }
 
 float PianoRollView::yForNote(int note) const
 {
@@ -428,17 +508,54 @@ void PianoRollView::paint(juce::Graphics& g)
     int noteRange = std::max(1, highestNote - lowestNote + 1);
     float bw = beatWidth(), nh = noteHeight();
 
+    // Draw grid rows
     for (int n = lowestNote; n <= highestNote; ++n) {
         float y = yForNote(n);
         if (y > bounds.getHeight() || y + nh < 0) continue;
         int nio = n % 12;
         bool bk = (nio==1||nio==3||nio==6||nio==8||nio==10);
-        g.setColour(bk ? juce::Colour(0xff111122) : bgColour);
-        g.fillRect(0.0f, y, bounds.getWidth(), nh);
-        g.setColour(gridColour); g.drawHorizontalLine((int)y, 0, bounds.getWidth());
+        // Grid area background (right of piano keys)
+        g.setColour(bk ? juce::Colour(0xff131319) : bgColour);
+        if (nio == 0) g.setColour(juce::Colour(0xff19191f));
+        g.fillRect(pianoLabelMargin, y, bounds.getWidth() - pianoLabelMargin, nh);
+        // Grid lines
+        g.setColour(juce::Colour(0xff48474d).withAlpha(0.10f));
+        g.drawHorizontalLine((int)y, pianoLabelMargin, bounds.getWidth());
+    }
+
+    // Draw piano keys in left margin
+    // First pass: white key background for ALL rows (full width, no border lines)
+    for (int n = lowestNote; n <= highestNote; ++n) {
+        float y = yForNote(n);
+        if (y > bounds.getHeight() || y + nh < 0) continue;
+        g.setColour(juce::Colour(0xff2a2a32));
+        g.fillRect(0.0f, y, pianoLabelMargin, nh + 1.0f);
+    }
+    // Second pass: black keys (shorter width, on top)
+    float blackKeyW = pianoLabelMargin * 0.6f;
+    for (int n = lowestNote; n <= highestNote; ++n) {
+        float y = yForNote(n);
+        if (y > bounds.getHeight() || y + nh < 0) continue;
+        int nio = n % 12;
+        bool bk = (nio==1||nio==3||nio==6||nio==8||nio==10);
+        if (bk) {
+            g.setColour(juce::Colour(0xff151518));
+            g.fillRect(0.0f, y, blackKeyW, nh);
+        }
+    }
+    // Separator line between keys and grid
+    g.setColour(juce::Colour(0xff48474d).withAlpha(0.3f));
+    g.drawVerticalLine((int)pianoLabelMargin, 0.0f, bounds.getHeight());
+
+    // Note labels on keys
+    g.setFont(juce::Font(9.0f));
+    for (int n = lowestNote; n <= highestNote; ++n) {
+        float y = yForNote(n);
+        if (y > bounds.getHeight() || y + nh < 0) continue;
+        int nio = n % 12;
         if (nio == 0) {
-            g.setColour(juce::Colour(0xff666688)); g.setFont(juce::Font(9.0f));
-            g.drawText("C" + juce::String(n/12-1), 2, (int)y, 24, (int)nh, juce::Justification::centredLeft);
+            g.setColour(juce::Colour(0xffacaab1));
+            g.drawText("C" + juce::String(n/12-1), 0, (int)y, (int)pianoLabelMargin - 3, (int)nh, juce::Justification::centredRight);
         }
     }
 
@@ -447,10 +564,10 @@ void PianoRollView::paint(juce::Graphics& g)
         float x = xForBeat((double)b);
         if (x < -1 || x > bounds.getWidth()+1) continue;
         if (b%4==0) {
-            g.setColour(barLineColour); g.drawLine(x,0,x,bounds.getHeight(),1.5f);
-            g.setColour(juce::Colour(0xff666688)); g.setFont(juce::Font(9.0f));
+            g.setColour(barLineColour.withAlpha(0.3f)); g.drawLine(x,0,x,bounds.getHeight(),1.0f);
+            g.setColour(juce::Colour(0xffacaab1)); g.setFont(juce::Font(9.0f));
             g.drawText(juce::String(b/4+1),(int)x+2,0,20,12,juce::Justification::centredLeft);
-        } else { g.setColour(gridColour); g.drawLine(x,0,x,bounds.getHeight(),0.5f); }
+        } else { g.setColour(juce::Colour(0xff48474d).withAlpha(0.10f)); g.drawLine(x,0,x,bounds.getHeight(),0.5f); }
     }
 
     for (int i = 0; i < (int)noteEvents.size(); ++i) {
@@ -463,38 +580,46 @@ void PianoRollView::paint(juce::Graphics& g)
         else if (selectedNotes.count(i)) c = selectedColour;
         else if (i==dragNoteIndex) c = selectedColour;
         else if (ev.isGraceNote) c = graceColour;
-        else if (ev.accent) c = accentColour;
-        else if (ev.slide) c = slideColour;
+        else if (ev.accent) c = accentColour;   // Magenta for rhythm/trigger
+        else if (ev.slide) c = slideColour;      // Cyan for frequency/time
         else c = noteColour;
-        g.setColour(c.withAlpha(0.85f)); g.fillRoundedRectangle(x,y,w,h,2.0f);
-        g.setColour(c.brighter(0.3f)); g.drawRoundedRectangle(x,y,w,h,2.0f, selectedNotes.count(i) ? 1.5f : 0.8f);
-        g.setColour(c.brighter(ev.velocity*0.5f)); g.fillRect(x,y,std::min(3.0f,w),h);
-        if (w > 8.0f) { g.setColour(c.brighter(0.5f).withAlpha(0.5f)); g.fillRect(x+w-3.0f,y,3.0f,h); }
+        // Note body - sharp corners, no rounding
+        g.setColour(c.withAlpha(0.75f)); g.fillRect(x,y,w,h);
+        // Left border accent (2px) - matches note type colour
+        juce::Colour borderC = c.brighter(0.3f);
+        if (selectedNotes.count(i)) borderC = selectedColour;
+        g.setColour(borderC); g.fillRect(x,y,2.0f,h);
+        // Glow effect for velocity
+        g.setColour(c.withAlpha(ev.velocity * 0.25f));
+        g.fillRect(x,y,w,h);
     }
 
     float ly = bounds.getHeight()-14; g.setFont(juce::Font(9.0f));
     auto dl=[&](float lx,juce::Colour c,const juce::String& t){
         g.setColour(c); g.fillRect(lx,ly,8.0f,8.0f);
-        g.setColour(juce::Colour(0xff888899)); g.drawText(t,(int)lx+10,(int)ly-1,50,12,juce::Justification::centredLeft);
+        g.setColour(juce::Colour(0xffacaab1)); g.drawText(t,(int)lx+10,(int)ly-1,50,12,juce::Justification::centredLeft);
     };
-    dl(4,noteColour,"Note"); dl(54,accentColour,"Accent"); dl(114,slideColour,"Slide"); dl(164,graceColour,"Grace");
-    g.setColour(juce::Colour(0xff555566));
+    float lm = pianoLabelMargin + 8.0f;
+    dl(lm,noteColour,"Note"); dl(lm+50,accentColour,"Accent"); dl(lm+110,slideColour,"Slide"); dl(lm+160,graceColour,"Grace");
+    g.setColour(juce::Colour(0xff76747b));
     g.drawText("Click:add | Drag:move | Edge:resize | RClick:del | Ctrl+Wh:zoom",
-               220,(int)ly-1,(int)bounds.getWidth()-224,12,juce::Justification::centredLeft);
+               (int)(lm+216),(int)ly-1,(int)(bounds.getWidth()-lm-220),12,juce::Justification::centredLeft);
 
     // Rubber band selection rectangle
     if (isRubberBanding && !selectionRect.isEmpty()) {
-        g.setColour(juce::Colour(0x3300aaff));
+        g.setColour(juce::Colour(0xff81ecff).withAlpha(0.1f));
         g.fillRect(selectionRect);
-        g.setColour(juce::Colour(0xaa00aaff));
+        g.setColour(juce::Colour(0xff81ecff).withAlpha(0.5f));
         g.drawRect(selectionRect, 1.0f);
     }
 
+    // Playhead - CRT scanline style with cyan glow
     if (processor && processor->isCurrentlyPlaying() && processor->getPhraseLengthBeats()>0) {
         float cx = xForBeat(processor->getPlaybackPositionBeats());
         if (cx>=0 && cx<=bounds.getWidth()) {
-            g.setColour(cursorColour); g.drawLine(cx,0,cx,bounds.getHeight(),2.0f);
+            // 1px primary line with 4px outer glow
             g.setColour(cursorColour.withAlpha(0.15f)); g.fillRect(cx-4.0f,0.0f,8.0f,bounds.getHeight());
+            g.setColour(cursorColour); g.drawLine(cx,0,cx,bounds.getHeight(),1.0f);
         }
     }
 }
@@ -649,43 +774,96 @@ void PianoRollView::timerCallback()
 // ============================================================
 // PsyMelodyEditor
 // ============================================================
+// Sidebar nav helpers
+void PsyMelodyEditor::updateNavSelection()
+{
+    auto style = [&](juce::TextButton& b, int idx) {
+        bool active = (activeNavIndex == idx);
+        b.setColour(juce::TextButton::buttonColourId,
+                     active ? psyLnf.surfaceContainerHigh : psyLnf.surfaceContainerLow);
+        b.setColour(juce::TextButton::textColourOffId,
+                     active ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.4f));
+    };
+    // When MANUAL is open, dim all mode buttons
+    if (showSettings) {
+        auto dim = [&](juce::TextButton& b) {
+            b.setColour(juce::TextButton::buttonColourId, psyLnf.surfaceContainerLow);
+            b.setColour(juce::TextButton::textColourOffId, psyLnf.onSurfaceVariant.withAlpha(0.25f));
+        };
+        dim(navMelodyBtn); dim(navBasslineBtn); dim(navChordBtn);
+    } else {
+        style(navMelodyBtn, 0); style(navBasslineBtn, 1); style(navChordBtn, 2);
+    }
+    // Settings gear button - keep transparent, icon drawn in paintOverChildren
+    navManualBtn.setColour(juce::TextButton::buttonColourId,
+                           showSettings ? psyLnf.surfaceContainerHigh : juce::Colours::transparentBlack);
+    navManualBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::transparentBlack);
+    repaint();
+}
+
+void PsyMelodyEditor::updateSubgenreSelection()
+{
+    int sel = subgenreSelector.getSelectedId() - 1;
+    auto style = [&](juce::TextButton& b, int idx) {
+        bool active = (sel == idx);
+        b.setColour(juce::TextButton::buttonColourId,
+                     active ? psyLnf.surfaceContainerHigh : psyLnf.surfaceContainerLow);
+        b.setColour(juce::TextButton::textColourOffId,
+                     active ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.5f));
+    };
+    style(subGoaBtn, 0); style(subFullOnBtn, 1); style(subDarkBtn, 2); style(subProgBtn, 3);
+}
+
+void PsyMelodyEditor::updateLaneTabSelection()
+{
+    int sel = laneTypeSelector.getSelectedId();
+    auto style = [&](juce::TextButton& b, int idx) {
+        bool active = (sel == idx);
+        b.setColour(juce::TextButton::buttonColourId, psyLnf.surfaceContainerLow);
+        b.setColour(juce::TextButton::textColourOffId,
+                     active ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.5f));
+    };
+    style(laneVelBtn, 1); style(lanePanBtn, 2); style(lanePitchBtn, 3);
+}
+
 PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     : AudioProcessorEditor(&p), psyProcessor(p)
 {
     setLookAndFeel(&psyLnf);
-    setSize(780, 720);
+    setSize(960, 720);
 
     // Settings button
     settingsBtn.setButtonText("SET");
-    settingsBtn.setColour(juce::TextButton::buttonColourId, psyLnf.panelBg);
-    settingsBtn.setColour(juce::TextButton::textColourOffId, psyLnf.textDim);
+    settingsBtn.setColour(juce::TextButton::buttonColourId, psyLnf.surfaceContainerHigh);
+    settingsBtn.setColour(juce::TextButton::textColourOffId, psyLnf.onSurfaceVariant);
     settingsBtn.onClick = [this] {
         showSettings = !showSettings;
         settingsPage.setVisible(showSettings);
         // Hide/show main UI components
         auto toggle = [&](juce::Component& c) { c.setVisible(!showSettings); };
-        toggle(presetSelector); toggle(savePresetBtn);
-        toggle(rootNoteSelector); toggle(scaleSelector);
+        // presetSelector/savePresetBtn stay visible (in header)
+        toggle(rootNoteSelector); toggle(scaleSelector); toggle(bpmSlider); toggle(bpmLabel);
         toggle(patternCategorySelector); toggle(progressionSelector);
         toggle(phraseLengthSlider); toggle(densitySlider);
         toggle(acidSlider); toggle(ornamentSlider); toggle(graceSlider);
         toggle(rhythmVarSlider); toggle(pitchRangeSlider); toggle(octaveSlider);
         toggle(subgenreSelector); toggle(genModeSelector);
-        toggle(previewToggle); toggle(previewWaveSelector); toggle(previewVolSlider); toggle(previewVolLabel);
+        toggle(previewToggle); toggle(previewWaveSelector); toggle(previewWaveLabel); toggle(previewVolSlider); toggle(previewVolLabel);
         toggle(generateButton); toggle(variationButton);
         toggle(undoBtn); toggle(redoBtn);
         toggle(exportMidiBtn); toggle(importMidiBtn); toggle(copyMidiBtn); toggle(quickSaveDirBtn);
         toggle(pianoRoll); toggle(paramLane); toggle(laneTypeSelector);
-        toggle(zoomInXBtn); toggle(zoomOutXBtn);
-        toggle(zoomInYBtn); toggle(zoomOutYBtn); toggle(zoomFitBtn);
         toggle(hScrollBar); toggle(vScrollBar);
         // Labels
-        toggle(presetLabel); toggle(rootLabel); toggle(scaleLabel);
+        toggle(rootLabel); toggle(scaleLabel);
         toggle(patternLabel); toggle(progressionLabel); toggle(phraseLabel);
         toggle(densityLabel); toggle(acidLabel); toggle(ornamentLabel);
         toggle(graceLabel); toggle(rhythmLabel); toggle(pitchLabel);
         toggle(octaveLabel); toggle(subgenreLabel); toggle(genModeLabel);
         toggle(laneLabel);
+        // Subgenre pills and lane tabs
+        toggle(subGoaBtn); toggle(subFullOnBtn); toggle(subDarkBtn); toggle(subProgBtn);
+        toggle(laneVelBtn); toggle(lanePanBtn); toggle(lanePitchBtn);
 
         // Bass Style / Voicing Style: respect current GenMode
         if (!showSettings) {
@@ -702,19 +880,21 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         }
 
         settingsPage.toFront(true);
+        updateNavSelection();
         repaint();
         resized();
     };
-    addAndMakeVisible(settingsBtn);
+    settingsBtn.setVisible(false);  // Hidden - MANUAL nav button replaces it
+    addChildComponent(settingsBtn);
 
     // Settings page (hidden by default, added last so it draws on top)
     settingsPage.setVisible(false);
     settingsPage.onLanguageChanged = [this](PsyMelody::Lang lang) {
         currentLang = lang;
-        generateButton.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::Generate));
-        variationButton.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::Variation));
-        exportMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::ExportMidi));
-        copyMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::QuickSave));
+        generateButton.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::Generate).toUpperCase());
+        variationButton.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::Variation).toUpperCase());
+        exportMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::ExportMidi).toUpperCase());
+        copyMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::QuickSave).toUpperCase());
         repaint();
     };
     addChildComponent(settingsPage);  // addChild, NOT addAndMakeVisible
@@ -777,7 +957,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     };
     addAndMakeVisible(presetSelector);
 
-    savePresetBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff443366));
+    savePresetBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
     savePresetBtn.onClick = [this] { saveUserPreset(); };
     addAndMakeVisible(savePresetBtn);
 
@@ -830,8 +1010,23 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         if (id == 1) paramLane.setLaneType(ParamLaneView::LaneType::Velocity);
         else if (id == 2) paramLane.setLaneType(ParamLaneView::LaneType::Pan);
         else paramLane.setLaneType(ParamLaneView::LaneType::Pitch);
+        updateLaneTabSelection();
     };
+    laneTypeSelector.setVisible(false); // Hidden - replaced by tab buttons
+    laneLabel.setVisible(false);
     addAndMakeVisible(laneTypeSelector);
+
+    // Lane tab buttons
+    auto setupLaneTab = [this](juce::TextButton& b, int idx) {
+        b.setColour(juce::TextButton::buttonColourId, psyLnf.surfaceContainerLow);
+        b.onClick = [this, idx] {
+            laneTypeSelector.setSelectedId(idx, juce::sendNotificationSync);
+            updateLaneTabSelection();
+        };
+        addAndMakeVisible(b);
+    };
+    setupLaneTab(laneVelBtn, 1); setupLaneTab(lanePanBtn, 2); setupLaneTab(lanePitchBtn, 3);
+    updateLaneTabSelection();
 
     // Selectors
     rootLabel.setText("Root", juce::dontSendNotification);
@@ -874,8 +1069,24 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     for (size_t i = 0; i < PsyMelody::SUBGENRE_NAMES.size(); ++i)
         subgenreSelector.addItem(PsyMelody::SUBGENRE_NAMES[i], (int)i + 1);
     subgenreSelector.setSelectedId(1, juce::dontSendNotification);
-    subgenreSelector.onChange = [this] { syncToParams(); };
+    subgenreSelector.onChange = [this] { syncToParams(); updateSubgenreSelection(); };
+    subgenreSelector.setVisible(false); // Hidden - replaced by pill buttons
+    subgenreLabel.setVisible(false);
     addAndMakeVisible(subgenreSelector);
+
+    // Subgenre pill buttons
+    auto setupPill = [this](juce::TextButton& b, int idx) {
+        b.setComponentID("subgenre_pill");
+        b.setColour(juce::TextButton::buttonColourId, psyLnf.surfaceContainerLow);
+        b.onClick = [this, idx] {
+            subgenreSelector.setSelectedId(idx + 1, juce::sendNotificationSync);
+            updateSubgenreSelection();
+        };
+        addAndMakeVisible(b);
+    };
+    setupPill(subGoaBtn, 0); setupPill(subFullOnBtn, 1);
+    setupPill(subDarkBtn, 2); setupPill(subProgBtn, 3);
+    updateSubgenreSelection();
 
     // Generation mode selector
     genModeLabel.setText("Mode", juce::dontSendNotification);
@@ -887,17 +1098,41 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     genModeSelector.onChange = [this] {
         int id = genModeSelector.getSelectedId();
         psyProcessor.setGenMode(static_cast<PsyMelodyProcessor::GenMode>(id - 1));
-        // Show/hide bass/voicing specific controls
         bool isBass = (id == 2);
         bool isChord = (id == 3);
         bassStyleSelector.setVisible(isBass);
         bassStyleLabel.setVisible(isBass);
         voicingStyleSelector.setVisible(isChord);
         voicingStyleLabel.setVisible(isChord);
+        activeNavIndex = id - 1;
+        updateNavSelection();
         resized();
         repaint();
     };
+    genModeSelector.setVisible(false); // Hidden - replaced by sidebar nav
+    genModeLabel.setVisible(false);
     addAndMakeVisible(genModeSelector);
+
+    // Sidebar navigation buttons
+    auto setupNav = [this](juce::TextButton& b, int idx) {
+        b.setColour(juce::TextButton::buttonColourId, psyLnf.surfaceContainerLow);
+        b.onClick = [this, idx] {
+            // Close settings page if open
+            if (showSettings) settingsBtn.triggerClick();
+            activeNavIndex = idx;
+            genModeSelector.setSelectedId(std::min(idx + 1, 3), juce::sendNotificationSync);
+            updateNavSelection();
+        };
+        addAndMakeVisible(b);
+    };
+    setupNav(navMelodyBtn, 0); setupNav(navBasslineBtn, 1);
+    setupNav(navChordBtn, 2);
+    // MANUAL button opens settings page
+    navManualBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    navManualBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::transparentBlack);
+    navManualBtn.onClick = [this] { settingsBtn.triggerClick(); };
+    addAndMakeVisible(navManualBtn);
+    updateNavSelection();
 
     // Bass style selector
     bassStyleLabel.setText("Bass Style", juce::dontSendNotification);
@@ -935,19 +1170,44 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     };
     addAndMakeVisible(previewWaveSelector);
 
+    previewWaveLabel.setText("OSC", juce::dontSendNotification);
+    previewWaveLabel.setFont(juce::Font(12.0f));
+    previewWaveLabel.setColour(juce::Label::textColourId, juce::Colour(0xffcccccc));
+    previewWaveLabel.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(previewWaveLabel);
+
     previewVolSlider.setRange(0, 1, 0.01);
     previewVolSlider.setValue(0.15);
     previewVolSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     previewVolSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     previewVolSlider.onValueChange = [this] { psyProcessor.setPreviewVolume((float)previewVolSlider.getValue()); };
-    previewVolLabel.setText("Vol", juce::dontSendNotification);
+    previewVolLabel.setText("", juce::dontSendNotification);
     addAndMakeVisible(previewVolSlider);
     addAndMakeVisible(previewVolLabel);
 
     // Sliders
+    // BPM slider
+    bpmSlider.setRange(60, 200, 1);
+    bpmSlider.setValue(145);
+    bpmSlider.setSliderStyle(juce::Slider::LinearBarVertical);
+    bpmSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    bpmSlider.setColour(juce::Slider::trackColourId, juce::Colour(0xff000000));
+    bpmSlider.textFromValueFunction = [](double v) { return juce::String((int)v) + " bpm"; };
+    bpmSlider.setMouseDragSensitivity(200);
+    bpmSlider.onValueChange = [this] {
+        psyProcessor.getGeneratorParams().bpm = bpmSlider.getValue();
+    };
+    bpmLabel.setText("BPM", juce::dontSendNotification);
+    addAndMakeVisible(bpmSlider);
+    addAndMakeVisible(bpmLabel);
+
     setupSlider(phraseLengthSlider, phraseLabel, "Bars", 1, 16, 4, 1);
-    phraseLengthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-    phraseLengthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 36, 18);
+    phraseLengthSlider.setSliderStyle(juce::Slider::LinearBarVertical);
+    phraseLengthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    phraseLengthSlider.setColour(juce::Slider::trackColourId, juce::Colour(0xff000000));
+    phraseLengthSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff81ecff));
+    phraseLengthSlider.textFromValueFunction = [](double v) { return juce::String((int)v) + " steps"; };
+    phraseLengthSlider.setMouseDragSensitivity(150);
     setupSlider(densitySlider, densityLabel, "Density", 0, 1, 0.6);
     setupSlider(acidSlider, acidLabel, "Acid", 0, 1, 0.5);
     setupSlider(ornamentSlider, ornamentLabel, "Ornament", 0, 1, 0.3);
@@ -955,8 +1215,12 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     setupSlider(rhythmVarSlider, rhythmLabel, "Rhythm Var", 0, 1, 0.4);
     setupSlider(pitchRangeSlider, pitchLabel, "Pitch Range", 0, 1, 0.5);
     setupSlider(octaveSlider, octaveLabel, "Octave", 2, 6, 4, 1);
-    octaveSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-    octaveSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 36, 18);
+    octaveSlider.setSliderStyle(juce::Slider::LinearBarVertical);
+    octaveSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    octaveSlider.setColour(juce::Slider::trackColourId, juce::Colour(0xff000000));
+    octaveSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff81ecff));
+    octaveSlider.textFromValueFunction = [](double v) { return juce::String((int)v) + " oct"; };
+    octaveSlider.setMouseDragSensitivity(150);
 
     // Buttons
     generateButton.onClick = [this] {
@@ -992,22 +1256,23 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         }
         updatePianoRoll();
     };
-    generateButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff00664a));
+    generateButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff005762));
+    generateButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff81ecff));
     addAndMakeVisible(generateButton);
 
     variationButton.onClick = [this] { syncToParams(); pianoRoll.clearSelection(); psyProcessor.generateVariation(); updatePianoRoll(); };
-    variationButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff334466));
+    variationButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
     addAndMakeVisible(variationButton);
 
     // Undo/Redo buttons
-    undoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a50));
+    undoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
     undoBtn.onClick = [this] {
         psyProcessor.undo();
         updatePianoRoll();
     };
     addAndMakeVisible(undoBtn);
 
-    redoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a50));
+    redoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
     redoBtn.onClick = [this] {
         psyProcessor.redo();
         updatePianoRoll();
@@ -1015,16 +1280,16 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     addAndMakeVisible(redoBtn);
 
     // Export MIDI button
-    exportMidiBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff664422));
+    exportMidiBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
     exportMidiBtn.onClick = [this] {
         const auto& phrase = psyProcessor.getCurrentPhrase();
         if (phrase.empty()) return;
 
-        auto chooser = std::make_shared<juce::FileChooser>(
+        activeFileChooser = std::make_shared<juce::FileChooser>(
             "Export MIDI", juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
                               .getChildFile("PsyMelody.mid"),
             "*.mid");
-        chooser->launchAsync(juce::FileBrowserComponent::saveMode, [this, chooser](const juce::FileChooser& fc) {
+        activeFileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles, [this](const juce::FileChooser& fc) {
             auto file = fc.getResult();
             if (file != juce::File()) {
                 auto f = file.hasFileExtension(".mid") ? file : file.withFileExtension(".mid");
@@ -1038,8 +1303,8 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 bool ok = PsyMelody::MidiExport::exportToFile(
                     psyProcessor.getCurrentPhrase(), f, bpm);
                 if (ok) {
-                    exportMidiBtn.setButtonText("Exported!");
-                    juce::Timer::callAfterDelay(2000, [this] { exportMidiBtn.setButtonText("Export MIDI"); });
+                    exportMidiBtn.setButtonText("EXPORTED!");
+                    juce::Timer::callAfterDelay(2000, [this] { exportMidiBtn.setButtonText("EXPORT MIDI"); });
                 }
             }
         });
@@ -1047,7 +1312,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     addAndMakeVisible(exportMidiBtn);
 
     // Quick save MIDI
-    copyMidiBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff445566));
+    copyMidiBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
     copyMidiBtn.onClick = [this] {
         const auto& phrase = psyProcessor.getCurrentPhrase();
         if (phrase.empty()) return;
@@ -1071,19 +1336,19 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 psyProcessor.getCurrentPhrase(), file, bpm);
             if (ok) {
                 copyMidiBtn.setButtonText(file.getFileName());
-                juce::Timer::callAfterDelay(2000, [this] { copyMidiBtn.setButtonText("Quick Save"); });
+                juce::Timer::callAfterDelay(2000, [this] { copyMidiBtn.setButtonText("QUICK SAVE"); });
             }
         };
 
         if (quickSaveDir.isDirectory()) {
             doSave(quickSaveDir);
         } else {
-            auto chooser = std::make_shared<juce::FileChooser>(
+            activeFileChooser = std::make_shared<juce::FileChooser>(
                 "Select Quick Save Folder",
                 juce::File::getSpecialLocation(juce::File::userDesktopDirectory));
-            chooser->launchAsync(
+            activeFileChooser->launchAsync(
                 juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-                [this, chooser, doSave](const juce::FileChooser& fc) {
+                [this, doSave](const juce::FileChooser& fc) {
                     auto result = fc.getResult();
                     if (result.isDirectory())
                         doSave(result);
@@ -1093,15 +1358,15 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     addAndMakeVisible(copyMidiBtn);
 
     // Change quick save folder button
-    quickSaveDirBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff334455));
+    quickSaveDirBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
     quickSaveDirBtn.onClick = [this] {
-        auto chooser = std::make_shared<juce::FileChooser>(
+        activeFileChooser = std::make_shared<juce::FileChooser>(
             "Select Quick Save Folder",
             quickSaveDir.isDirectory() ? quickSaveDir
                 : juce::File::getSpecialLocation(juce::File::userDesktopDirectory));
-        chooser->launchAsync(
+        activeFileChooser->launchAsync(
             juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-            [this, chooser](const juce::FileChooser& fc) {
+            [this](const juce::FileChooser& fc) {
                 auto result = fc.getResult();
                 if (result.isDirectory()) {
                     quickSaveDir = result;
@@ -1112,21 +1377,44 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     addAndMakeVisible(quickSaveDirBtn);
 
     // Import MIDI
-    importMidiBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff335544));
+    importMidiBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
     importMidiBtn.onClick = [this] {
-        auto chooser = std::make_shared<juce::FileChooser>(
-            "Import MIDI", juce::File(), "*.mid;*.midi");
-        chooser->launchAsync(juce::FileBrowserComponent::openMode, [this, chooser](const juce::FileChooser& fc) {
-            auto file = fc.getResult();
-            if (file == juce::File()) return;
+        importMidiBtn.setButtonText("SELECTING...");
 
-            juce::FileInputStream stream(file);
-            if (!stream.openedOk()) return;
+        activeFileChooser = std::make_shared<juce::FileChooser>(
+            "Import MIDI",
+            juce::File::getSpecialLocation(juce::File::userDesktopDirectory),
+            "*.mid;*.midi");
+        auto flags = juce::FileBrowserComponent::openMode
+                   | juce::FileBrowserComponent::canSelectFiles;
+
+        activeFileChooser->launchAsync(flags, [this](const juce::FileChooser& fc)
+        {
+            auto file = fc.getResult();
+            if (!file.existsAsFile()) {
+                importMidiBtn.setButtonText("IMPORT MIDI");
+                return;
+            }
+
+            importMidiBtn.setButtonText("LOADING...");
+
+            // Read file via JUCE File API
+            auto inputStream = file.createInputStream();
+            if (inputStream == nullptr) {
+                importMidiBtn.setButtonText("OPEN FAILED");
+                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
+                return;
+            }
 
             juce::MidiFile midiFile;
-            if (!midiFile.readFrom(stream)) return;
+            midiFile.readFrom(*inputStream);
 
-            // Convert MIDI to NoteEvents
+            if (midiFile.getNumTracks() == 0) {
+                importMidiBtn.setButtonText("NO TRACKS");
+                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
+                return;
+            }
+
             std::vector<PsyMelody::NoteEvent> imported;
             int ticksPerBeat = midiFile.getTimeFormat();
             if (ticksPerBeat <= 0) ticksPerBeat = 480;
@@ -1135,25 +1423,31 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 const auto* seq = midiFile.getTrack(track);
                 if (!seq) continue;
 
-                // Build note-on/off pairs manually
-                std::map<int, double> activeNotes; // noteNumber -> startTick
+                struct NoteStart { double tick; float velocity; };
+                std::map<int, NoteStart> activeNotes;
+                float currentPan = 0.0f;
+                int currentPitchBend = 0;
 
                 for (int i = 0; i < seq->getNumEvents(); ++i) {
                     const auto& evt = seq->getEventPointer(i)->message;
-                    if (evt.isNoteOn() && evt.getVelocity() > 0) {
-                        activeNotes[evt.getNoteNumber()] = evt.getTimeStamp();
-                    }
+
+                    if (evt.isController() && evt.getControllerNumber() == 10)
+                        currentPan = (evt.getControllerValue() - 64) / 64.0f;
+                    else if (evt.isPitchWheel())
+                        currentPitchBend = evt.getPitchWheelValue() - 8192;
+                    else if (evt.isNoteOn() && evt.getVelocity() > 0)
+                        activeNotes[evt.getNoteNumber()] = {evt.getTimeStamp(), evt.getFloatVelocity()};
                     else if (evt.isNoteOff() || (evt.isNoteOn() && evt.getVelocity() == 0)) {
                         auto it = activeNotes.find(evt.getNoteNumber());
                         if (it != activeNotes.end()) {
                             PsyMelody::NoteEvent note;
                             note.noteNumber = evt.getNoteNumber();
-                            note.velocity = 0.75f;
-                            note.pan = 0.0f;
-                            note.startBeat = it->second / ticksPerBeat;
-                            note.duration = (evt.getTimeStamp() - it->second) / ticksPerBeat;
+                            note.velocity = it->second.velocity;
+                            note.pan = currentPan;
+                            note.startBeat = it->second.tick / ticksPerBeat;
+                            note.duration = (evt.getTimeStamp() - it->second.tick) / ticksPerBeat;
                             if (note.duration < 0.01) note.duration = 0.25;
-                            note.pitchBend = 0;
+                            note.pitchBend = currentPitchBend;
                             note.accent = false;
                             note.slide = false;
                             note.isGraceNote = false;
@@ -1166,7 +1460,6 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
 
             if (!imported.empty()) {
                 psyProcessor.updatePhrase(imported);
-                // Update bars to fit imported content
                 double maxBeat = 0;
                 for (const auto& n : imported)
                     maxBeat = std::max(maxBeat, n.startBeat + n.duration);
@@ -1174,25 +1467,21 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 psyProcessor.getGeneratorParams().phraseLengthBars = std::min(bars, 16);
                 syncFromParams();
                 updatePianoRoll();
+                importMidiBtn.setButtonText(juce::String((int)imported.size()) + " NOTES");
+                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
+            } else {
+                importMidiBtn.setButtonText("NO NOTES");
+                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
             }
         });
     };
     addAndMakeVisible(importMidiBtn);
 
-    // Zoom
-    auto setupZ = [this](juce::TextButton& b) {
-        b.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a3e));
-        addAndMakeVisible(b);
-    };
-    setupZ(zoomInXBtn); setupZ(zoomOutXBtn); setupZ(zoomInYBtn); setupZ(zoomOutYBtn); setupZ(zoomFitBtn);
-    zoomInXBtn.onClick  = [this] { pianoRoll.setZoomX(pianoRoll.getZoomX()*1.3f); };
-    zoomOutXBtn.onClick = [this] { pianoRoll.setZoomX(pianoRoll.getZoomX()/1.3f); };
-    zoomInYBtn.onClick  = [this] { pianoRoll.setZoomY(pianoRoll.getZoomY()*1.3f); };
-    zoomOutYBtn.onClick = [this] { pianoRoll.setZoomY(pianoRoll.getZoomY()/1.3f); };
-    zoomFitBtn.onClick  = [this] { pianoRoll.setZoomX(1); pianoRoll.setZoomY(1); pianoRoll.setScrollX(0); };
+    // Zoom buttons are now owned by pianoRoll (set up in PianoRollView constructor)
 
     syncFromParams();
     updatePianoRoll();
+    resized();  // Ensure all label fonts are applied after full setup
 }
 
 PsyMelodyEditor::~PsyMelodyEditor()
@@ -1344,6 +1633,7 @@ void PsyMelodyEditor::syncFromParams()
     patternCategorySelector.setSelectedId(p.patternCategory + 1, juce::dontSendNotification);
     progressionSelector.setSelectedId(p.progression + 1, juce::dontSendNotification);
     subgenreSelector.setSelectedId(p.subgenre + 1, juce::dontSendNotification);
+    bpmSlider.setValue(p.bpm, juce::dontSendNotification);
     phraseLengthSlider.setValue(p.phraseLengthBars, juce::dontSendNotification);
     densitySlider.setValue(p.density, juce::dontSendNotification);
     acidSlider.setValue(p.acidAmount, juce::dontSendNotification);
@@ -1363,6 +1653,7 @@ void PsyMelodyEditor::syncToParams()
     p.patternCategory = patternCategorySelector.getSelectedId() - 1;
     p.progression = progressionSelector.getSelectedId() - 1;
     p.subgenre = subgenreSelector.getSelectedId() - 1;
+    p.bpm = bpmSlider.getValue();
     p.phraseLengthBars = (int)phraseLengthSlider.getValue();
     p.density = (float)densitySlider.getValue();
     p.acidAmount = (float)acidSlider.getValue();
@@ -1402,192 +1693,511 @@ void PsyMelodyEditor::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart)
 
 void PsyMelodyEditor::paint(juce::Graphics& g)
 {
-    // Background gradient
-    juce::ColourGradient bgGrad(psyLnf.bg, 0, 0,
-                                 psyLnf.bg.darker(0.3f), 0, (float)getHeight(), false);
-    g.setGradientFill(bgGrad);
-    g.fillRect(getLocalBounds());
+    // Flat surface background
+    g.fillAll(psyLnf.surface);
 
-    // Header bar with gradient
-    juce::ColourGradient headerGrad(juce::Colour(0xff1a1a40), 0, 0,
-                                     juce::Colour(0xff0e0e28), 0, 44, false);
-    g.setGradientFill(headerGrad);
-    g.fillRect(0, 0, getWidth(), 48);
-    // Header bottom line
-    g.setColour(psyLnf.accent.withAlpha(0.3f));
-    g.fillRect(0, 47, getWidth(), 1);
+    // ---- Header bar ----
+    g.setColour(psyLnf.surface);
+    g.fillRect(0, 0, getWidth(), headerH);
+    g.setColour(psyLnf.primary.withAlpha(0.10f));
+    g.fillRect(0, headerH - 1, getWidth(), 1);
 
-    // Title
-    g.setColour(psyLnf.accent);
+    // Title with glow (left-aligned from edge)
+    g.setColour(psyLnf.primary);
     g.setFont(psyLnf.titleFont);
     g.drawText(PsyMelody::tr(currentLang, PsyMelody::Str::Title),
-               14, 4, 200, 22, juce::Justification::centredLeft);
-    g.setColour(psyLnf.textDim);
+               14, 4, 180, 22, juce::Justification::centredLeft);
+    // Version badge
+    g.setColour(psyLnf.surfaceContainerHigh);
+    g.fillRect(155, 8, 42, 14);
+    g.setColour(psyLnf.primary.withAlpha(0.6f));
+    g.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+    g.drawText("v0.1.0", 155, 8, 42, 14, juce::Justification::centred);
+    // Subtitle
+    g.setColour(psyLnf.onSurfaceVariant);
     g.setFont(psyLnf.uiFontRegular.withHeight(12.0f));
     g.drawText(PsyMelody::tr(currentLang, PsyMelody::Str::Subtitle),
-               14, 25, 250, 14, juce::Justification::centredLeft);
+               14, 27, 250, 14, juce::Justification::centredLeft);
+
+    // ---- Sidebar (below header, above footer) ----
+    g.setColour(psyLnf.surfaceContainerLow);
+    g.fillRect(0, headerH, sidebarW, getHeight() - headerH - footerH);
+    // Active nav indicator (left border)
+    // Active nav indicator moved to paintOverChildren
 
     if (showSettings) return;
 
-    // Section headers with gradient lines
-    psyLnf.drawSectionHeader(g, 14, sectionPresetY, getWidth() - 28, "PRESET");
-    psyLnf.drawSectionHeader(g, 14, sectionGenY, getWidth() - 28, "GENERATOR");
-    psyLnf.drawSectionHeader(g, 14, sectionExpY, getWidth() - 28, "EXPRESSION");
+    // ---- Footer bar (full width) ----
+    int footerY = getHeight() - footerH;
+    g.setColour(psyLnf.surface);
+    g.fillRect(0, footerY, getWidth(), footerH);
+    g.setColour(psyLnf.primary.withAlpha(0.10f));
+    g.fillRect(0, footerY, getWidth(), 1);
+
+    // ---- Control panel border ----
+    int controlY = headerH;
+    int controlH = 36;
+    g.setColour(psyLnf.surfaceContainerLow);
+    g.fillRect(sidebarW, controlY, getWidth() - sidebarW, controlH);
+
+    // ---- Parameter knob + right panel background ----
+    // Match resized() calculations exactly:
+    //   contentW = getWidth() - sidebarW - 16 (pad=8 each side)
+    //   ctrlW = (contentW - 8) / 3
+    //   rightPanelW = ctrlW, knobAreaW = contentW - ctrlW
+    //   knobW = (knobAreaW - 15) / 6
+    int bentoY = headerH + controlH + 4;
+    int bentoH = 80;
+    int bentoX = sidebarW + 8;
+    int contentW2 = getWidth() - sidebarW - 16;
+    int ctrlW2 = (contentW2 - 12) / 4;
+    int rightPanelW = ctrlW2;
+    int knobAreaW = contentW2 - rightPanelW;
+    int cardW2 = (knobAreaW - 15) / 6;
+    // Knob card backgrounds
+    for (int i = 0; i < 6; ++i) {
+        g.setColour(psyLnf.surfaceContainerHigh);
+        g.fillRect(bentoX + i * (cardW2 + 3), bentoY, cardW2, bentoH);
+    }
+    // Right panel background
+    int rightPanelX = bentoX + 6 * (cardW2 + 3);
+    g.setColour(psyLnf.surfaceContainerHigh);
+    g.fillRect(rightPanelX, bentoY, getWidth() - 8 - rightPanelX, bentoH);
+
+}
+
+void PsyMelodyEditor::paintOverChildren(juce::Graphics& g)
+{
+    // ---- Active nav indicator (left border) ----
+    if (activeNavIndex < 3 && !showSettings) {
+        int navBtnH2 = 56;
+        int navY2 = headerH + activeNavIndex * navBtnH2;
+        g.setColour(psyLnf.primary);
+        g.fillRect(0, navY2, 3, navBtnH2);
+    }
+    if (showSettings) {
+        int gearY = headerH + 56 * 3;
+        g.setColour(psyLnf.primary);
+        g.fillRect(0, gearY, 3, 56);
+    }
+
+    // ---- Settings nav: gear icon + SETTINGS label (same layout as MELODY etc) ----
+    {
+        auto b = navManualBtn.getBounds().toFloat();
+        float cx = b.getCentreX();
+        float iconY = b.getY() + 18.0f;
+        float textY = b.getY() + 32.0f;
+        auto col = showSettings ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.4f);
+        g.setColour(col);
+
+        // Gear icon (same size as other nav icons)
+        float outerR = 7.0f;
+        float innerR = 3.5f;
+        int teeth = 8;
+        float toothDepth = 2.5f;
+
+        juce::Path gear;
+        for (int i = 0; i < teeth * 2; ++i) {
+            float angle = (float)i * juce::MathConstants<float>::pi / (float)teeth;
+            float r = (i % 2 == 0) ? outerR : (outerR - toothDepth);
+            float px = cx + std::cos(angle) * r;
+            float py = iconY + std::sin(angle) * r;
+            if (i == 0) gear.startNewSubPath(px, py);
+            else gear.lineTo(px, py);
+        }
+        gear.closeSubPath();
+        g.strokePath(gear, juce::PathStrokeType(1.3f));
+        g.drawEllipse(cx - innerR * 0.5f, iconY - innerR * 0.5f, innerR, innerR, 1.1f);
+
+        // Label
+        g.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+        g.drawText("SETTINGS", (int)b.getX(), (int)textY, (int)b.getWidth(), 12,
+                   juce::Justification::centred);
+    }
+
+    // ---- Save icon: down arrow + tray ----
+    {
+        auto sb = savePresetBtn.getBounds().toFloat();
+        float cx = sb.getCentreX();
+        float cy = sb.getCentreY();
+        bool hover = savePresetBtn.isMouseOver();
+        auto col = hover ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.5f);
+        g.setColour(col);
+
+        // Down arrow (shaft + head)
+        g.fillRect(cx - 1.0f, cy - 7.0f, 2.0f, 9.0f);  // shaft
+        juce::Path arrow;
+        arrow.startNewSubPath(cx - 5.0f, cy + 0.0f);
+        arrow.lineTo(cx, cy + 5.0f);
+        arrow.lineTo(cx + 5.0f, cy + 0.0f);
+        g.strokePath(arrow, juce::PathStrokeType(1.5f));
+
+        // Tray (U shape at bottom)
+        juce::Path tray;
+        tray.startNewSubPath(cx - 7.0f, cy + 2.0f);
+        tray.lineTo(cx - 7.0f, cy + 7.0f);
+        tray.lineTo(cx + 7.0f, cy + 7.0f);
+        tray.lineTo(cx + 7.0f, cy + 2.0f);
+        g.strokePath(tray, juce::PathStrokeType(1.5f));
+    }
+
+    // ---- Sidebar nav: icon + label ----
+    auto drawNavItem = [&](juce::TextButton& btn, int idx, const juce::String& label) {
+        auto b = btn.getBounds().toFloat();
+        float cx = b.getCentreX();
+        float iconY = b.getY() + 18.0f;   // icon on top
+        float textY = b.getY() + 32.0f;       // label just below icon
+        bool active = (activeNavIndex == idx && !showSettings);
+        auto col = active ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.4f);
+        g.setColour(col);
+
+        // Icon on top
+        if (idx == 0) {
+            // Eighth note (♪) - notehead + stem + flag
+            // Tilted notehead (ellipse)
+            juce::Path head;
+            head.addEllipse(-3.5f, -2.0f, 7.0f, 4.5f);
+            auto headTransform = juce::AffineTransform::rotation(-0.3f).translated(cx - 1, iconY + 3);
+            g.fillPath(head, headTransform);
+            // Stem
+            float stemX = cx + 2.0f;
+            g.drawLine(stemX, iconY - 7, stemX, iconY + 2, 1.5f);
+            // Flag (curved)
+            juce::Path flag;
+            flag.startNewSubPath(stemX, iconY - 7);
+            flag.cubicTo(stemX + 5, iconY - 5, stemX + 6, iconY - 1, stemX + 2, iconY + 0);
+            g.strokePath(flag, juce::PathStrokeType(1.3f));
+        } else if (idx == 1) {
+            // Piano keyboard - 4 white keys + 3 black keys (C D E F + C# D# F#)
+            float kw = 5.0f, kh = 14.0f;
+            float kx = cx - 10.0f;
+            float ky = iconY - 7.0f;
+            // White keys - no fill, no separators
+            float bkw = 3.0f, bkh = 8.0f;
+            // Outer border
+            g.setColour(col);
+            g.drawRect(kx, ky, kw * 4, kh, 0.5f);
+            // Black keys (bright bars)
+            g.fillRect(kx + kw * 1 - bkw * 0.5f, ky, bkw, bkh);
+            g.fillRect(kx + kw * 2 - bkw * 0.5f, ky, bkw, bkh);
+            g.fillRect(kx + kw * 3 - bkw * 0.5f, ky, bkw, bkh);
+        } else if (idx == 2) {
+            // layers - 3 stacked rectangles offset
+            g.drawRect(cx - 7, iconY - 4, 14.0f, 3.0f, 1.0f);
+            g.drawRect(cx - 5, iconY, 14.0f, 3.0f, 1.0f);
+            g.drawRect(cx - 7, iconY + 4, 14.0f, 3.0f, 1.0f);
+        }
+
+        // Label below icon
+        g.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+        g.drawText(label, (int)b.getX(), (int)textY, (int)b.getWidth(), 12,
+                   juce::Justification::centred);
+    };
+    drawNavItem(navMelodyBtn, 0, "MELODY");
+    drawNavItem(navBasslineBtn, 1, "BASSLINE");
+    drawNavItem(navChordBtn, 2, "CHORD");
+
+    // ---- Speaker icon for volume ----
+    if (previewVolLabel.isVisible())
+    {
+        auto lb = previewVolLabel.getBounds();
+        float cx = lb.getCentreX();
+        float cy = lb.getCentreY();
+        g.setColour(psyLnf.onSurfaceVariant.withAlpha(0.8f));
+        // Speaker body
+        juce::Path speaker;
+        speaker.addRectangle(cx - 6.0f, cy - 3.0f, 4.0f, 6.0f);
+        // Cone
+        speaker.startNewSubPath(cx - 2.0f, cy - 3.0f);
+        speaker.lineTo(cx + 3.0f, cy - 6.0f);
+        speaker.lineTo(cx + 3.0f, cy + 6.0f);
+        speaker.lineTo(cx - 2.0f, cy + 3.0f);
+        speaker.closeSubPath();
+        g.fillPath(speaker);
+        // Sound waves
+        g.setColour(psyLnf.onSurfaceVariant.withAlpha(0.55f));
+        auto drawArc = [&](float radius) {
+            juce::Path arc;
+            arc.addCentredArc(cx + 3.0f, cy, radius, radius,
+                              juce::MathConstants<float>::halfPi,
+                              -juce::MathConstants<float>::pi * 0.3f,
+                              juce::MathConstants<float>::pi * 0.3f, true);
+            g.strokePath(arc, juce::PathStrokeType(1.2f));
+        };
+        drawArc(5.0f);
+        drawArc(8.0f);
+    }
+
+    // ---- Undo/Redo icons (Unicode characters) ----
+    {
+        auto drawIcon = [&](juce::TextButton& btn, bool isUndo) {
+            auto b = btn.getBounds();
+            bool hover = btn.isMouseOver();
+            g.setColour(hover ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.45f));
+            int cx = b.getCentreX();
+            int iconY = b.getY() + 4;
+            auto iconRect = juce::Rectangle<int>(cx - 20, iconY, 40, 32);
+            g.setFont(juce::Font("Apple Symbols", 32.0f, juce::Font::plain));
+            g.drawText(isUndo ? juce::String::charToString(0x27F2)    // ⟲
+                              : juce::String::charToString(0x27F3),   // ⟳
+                       iconRect, juce::Justification::centred);
+            auto labelRect = juce::Rectangle<int>(cx - 20, iconY + 30, 40, 12);
+            g.setFont(juce::Font(9.0f));
+            g.drawText(isUndo ? "UNDO" : "REDO",
+                       labelRect, juce::Justification::centredTop);
+        };
+        drawIcon(undoBtn, true);
+        drawIcon(redoBtn, false);
+    }
 }
 
 void PsyMelodyEditor::resized()
 {
-    // Settings button top-right
-    settingsBtn.setBounds(getWidth() - 40, 8, 30, 28);
+    // ---- Preset in header (top-right) ----
+    int presetW = 200;
+    int saveW = 26;
+    savePresetBtn.setBounds(getWidth() - 10 - saveW, 11, saveW, saveW);
+    presetSelector.setBounds(getWidth() - 10 - saveW - 4 - presetW, 12, presetW, 24);
+    // Preset label
+    int presetLabelX = getWidth() - 10 - saveW - 4 - presetW - 54;
+    presetLabel.setText("PRESET", juce::dontSendNotification);
+    presetLabel.setBounds(presetLabelX, 14, 50, 20);
+    presetLabel.setFont(psyLnf.uiFontBold.withHeight(10.0f));
+    presetLabel.setColour(juce::Label::textColourId, psyLnf.onSurfaceVariant);
+    presetLabel.setJustificationType(juce::Justification::centredRight);
+    presetLabel.setVisible(true);
 
+    // ---- Sidebar navigation ----
+    int navBtnH = 56;
+    int navY = headerH;
+    navMelodyBtn.setBounds(0, navY, sidebarW, navBtnH); navY += navBtnH;
+    navBasslineBtn.setBounds(0, navY, sidebarW, navBtnH); navY += navBtnH;
+    navChordBtn.setBounds(0, navY, sidebarW, navBtnH); navY += navBtnH;
+    // Settings gear right below CHORD
+    navManualBtn.setBounds(0, navY, sidebarW, navBtnH);
+
+    // Undo/Redo at sidebar bottom (stacked vertically, above footer)
+    int undoRedoSize = 48;
+    int undoRedoY = getHeight() - footerH - undoRedoSize * 2 - 4;
+    undoBtn.setBounds(0, undoRedoY, sidebarW, undoRedoSize);
+    redoBtn.setBounds(0, undoRedoY + undoRedoSize, sidebarW, undoRedoSize);
+    // Make buttons fully invisible (icons drawn in paintOverChildren)
+    undoBtn.setAlpha(0.0f);
+    redoBtn.setAlpha(0.0f);
+
+    // Content area (right of sidebar, below header, above footer)
     auto area = getLocalBounds();
-    area.removeFromTop(44); // header
-    area = area.reduced(10, 0);
+    area.removeFromLeft(sidebarW);
+    area.removeFromTop(headerH);
+    area.removeFromBottom(footerH);
 
     if (showSettings) {
-        settingsPage.setBounds(area.reduced(0, 4));
+        settingsPage.setBounds(area.reduced(8, 4));
         return;
     }
 
-    int rh = 22; // row height
-    int g = 2;   // gap
-    int labelW = 68;
-    int halfW = (area.getWidth() - 10) / 2; // each column width
+    int pad = 8;
+    area = area.reduced(pad, 0);
 
-    // Helper: layout a row with label on left, return control bounds
-    auto rowIn = [&](juce::Rectangle<int>& col, juce::Label* lbl = nullptr) {
-        auto r = col.removeFromTop(rh);
-        col.removeFromTop(g);
-        if (lbl) {
-            lbl->setBounds(r.removeFromLeft(labelW));
-            lbl->setJustificationType(juce::Justification::centredRight);
-            lbl->setFont(psyLnf.uiFont.withHeight(13.0f));
-            lbl->setColour(juce::Label::textColourId, juce::Colour(0xff99aabb));
-        } else {
-            r.removeFromLeft(labelW);
-        }
-        return r.reduced(1, 0);
-    };
+    // ---- Control strip (Root/Scale, BPM, Phrase/Octave, Pattern/Chords) ----
+    auto controlStrip = area.removeFromTop(36);
+    int ctrlW = (controlStrip.getWidth() - 12) / 4;
 
-    // === PRESET section ===
-    sectionPresetY = area.getY() + 2;
-    area.removeFromTop(16); // section header
-    auto presetRow = area.removeFromTop(rh);
-    presetLabel.setBounds(presetRow.removeFromLeft(labelW));
-    presetLabel.setJustificationType(juce::Justification::centredRight);
-    presetLabel.setFont(psyLnf.uiFont.withHeight(13.0f));
-    presetLabel.setColour(juce::Label::textColourId, juce::Colour(0xff99aabb));
-    savePresetBtn.setBounds(presetRow.removeFromRight(50).reduced(1));
-    presetSelector.setBounds(presetRow.reduced(1));
-    area.removeFromTop(g);
+    // Root + Scale
+    auto rootArea = controlStrip.removeFromLeft(ctrlW);
+    rootLabel.setText("ROOT / SCALE", juce::dontSendNotification);
+    rootLabel.setBounds(rootArea.removeFromTop(10));
+    rootLabel.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+    rootLabel.setColour(juce::Label::textColourId, psyLnf.outline);
+    rootLabel.setJustificationType(juce::Justification::centredLeft);
+    auto rootRow = rootArea;
+    rootNoteSelector.setBounds(rootRow.removeFromLeft(rootRow.getWidth() / 3).reduced(1, 0));
+    scaleSelector.setBounds(rootRow.reduced(1, 0));
+    scaleLabel.setVisible(false);
+    controlStrip.removeFromLeft(4);
 
-    // === GENERATOR section ===
-    sectionGenY = area.getY() + 2;
-    area.removeFromTop(16); // section header
+    // BPM
+    auto bpmArea = controlStrip.removeFromLeft(ctrlW / 2);
+    bpmLabel.setText("BPM", juce::dontSendNotification);
+    bpmLabel.setBounds(bpmArea.removeFromTop(10));
+    bpmLabel.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+    bpmLabel.setColour(juce::Label::textColourId, psyLnf.outline);
+    bpmLabel.setJustificationType(juce::Justification::centredLeft);
+    bpmSlider.setBounds(bpmArea.reduced(1, 0));
+    controlStrip.removeFromLeft(4);
 
-    // 4 rows always shown, Bass Style/Voicing Style only if relevant
-    int genRows = 4;
-    auto genArea = area.removeFromTop(rh * genRows + g * (genRows - 1));
-    auto leftCol = genArea.removeFromLeft(halfW);
-    genArea.removeFromLeft(10); // gutter
-    auto rightCol = genArea;
+    // Phrase + Octave
+    auto phraseArea = controlStrip.removeFromLeft(ctrlW);
+    phraseLabel.setText("PHRASE / OCTAVE", juce::dontSendNotification);
+    phraseLabel.setBounds(phraseArea.removeFromTop(10));
+    phraseLabel.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+    phraseLabel.setColour(juce::Label::textColourId, psyLnf.outline);
+    phraseLabel.setJustificationType(juce::Justification::centredLeft);
+    auto phraseRow = phraseArea;
+    phraseLengthSlider.setBounds(phraseRow.removeFromLeft(phraseRow.getWidth() / 2).reduced(1, 0));
+    octaveSlider.setBounds(phraseRow.reduced(1, 0));
+    octaveLabel.setVisible(false);
+    controlStrip.removeFromLeft(4);
 
-    // Left column: Mode, Root, Pattern, Bars
-    genModeSelector.setBounds(rowIn(leftCol, &genModeLabel));
-    rootNoteSelector.setBounds(rowIn(leftCol, &rootLabel));
-    patternCategorySelector.setBounds(rowIn(leftCol, &patternLabel));
-    phraseLengthSlider.setBounds(rowIn(leftCol, &phraseLabel));
+    // Pattern + Progression
+    auto patArea = controlStrip;
+    patternLabel.setText("PATTERN / CHORDS", juce::dontSendNotification);
+    patternLabel.setBounds(patArea.removeFromTop(10));
+    patternLabel.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+    patternLabel.setColour(juce::Label::textColourId, psyLnf.outline);
+    patternLabel.setJustificationType(juce::Justification::centredLeft);
+    auto patRow = patArea;
+    patternCategorySelector.setBounds(patRow.removeFromLeft(patRow.getWidth() / 2).reduced(1, 0));
+    progressionSelector.setBounds(patRow.reduced(1, 0));
+    progressionLabel.setVisible(false);
 
-    // Right column: Subgenre, Scale, Chords, Octave
-    subgenreSelector.setBounds(rowIn(rightCol, &subgenreLabel));
-    scaleSelector.setBounds(rowIn(rightCol, &scaleLabel));
-    progressionSelector.setBounds(rowIn(rightCol, &progressionLabel));
-    octaveSlider.setBounds(rowIn(rightCol, &octaveLabel));
+    // (Subgenre pills moved to right panel in knob row below)
 
-    // Bass Style / Voicing Style - only take space if visible
-    bool showBass = bassStyleSelector.isVisible();
-    bool showVoicing = voicingStyleSelector.isVisible();
-    if (showBass || showVoicing) {
-        auto extraRow = area.removeFromTop(rh);
-        area.removeFromTop(g);
-        auto extraLeft = extraRow.removeFromLeft(halfW);
-        extraRow.removeFromLeft(10);
-        auto extraRight = extraRow;
-        if (showBass)
-            bassStyleSelector.setBounds(rowIn(extraLeft, &bassStyleLabel));
-        if (showVoicing)
-            voicingStyleSelector.setBounds(rowIn(extraRight, &voicingStyleLabel));
-    }
+    area.removeFromTop(4);
 
-    // === EXPRESSION section (knob grid) ===
-    sectionExpY = area.getY() + 2;
-    area.removeFromTop(16); // section header
-    int knobH = 70;  // height for rotary knob + label
-    int knobW = (area.getWidth() - 10) / 6;  // 6 knobs per row
-    auto knobRow = area.removeFromTop(knobH);
+    // ---- Parameter knobs (3 cols wide) + right panel (Subgenre + Bass/Voicing) ----
+    auto bentoArea = area.removeFromTop(80);
+    // Right panel = 4th column width
+    auto rightPanel = bentoArea.removeFromRight(ctrlW);
+    // Knobs fill the remaining 3 columns
+    int knobW = (bentoArea.getWidth() - 15) / 6;
 
-    auto placeKnob = [&](juce::Slider& s, juce::Label& l, juce::Rectangle<int>& row) {
-        auto cell = row.removeFromLeft(knobW);
+    auto placeKnob = [&](juce::Slider& s, juce::Label& l, const juce::String& name,
+                          juce::Rectangle<int> cell) {
+        cell = cell.reduced(4, 4);
+        l.setText(name, juce::dontSendNotification);
         l.setBounds(cell.removeFromTop(12));
+        l.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+        l.setColour(juce::Label::textColourId, psyLnf.onSurfaceVariant);
         l.setJustificationType(juce::Justification::centred);
-        l.setFont(psyLnf.uiFont.withHeight(12.0f));
-        l.setColour(juce::Label::textColourId, juce::Colour(0xff8888aa));
         s.setBounds(cell);
     };
 
-    placeKnob(densitySlider, densityLabel, knobRow);
-    placeKnob(acidSlider, acidLabel, knobRow);
-    placeKnob(ornamentSlider, ornamentLabel, knobRow);
-    placeKnob(rhythmVarSlider, rhythmLabel, knobRow);
-    placeKnob(pitchRangeSlider, pitchLabel, knobRow);
-    placeKnob(graceSlider, graceLabel, knobRow);
+    auto k1 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
+    auto k2 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
+    auto k3 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
+    auto k4 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
+    auto k5 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
+    auto k6 = bentoArea;
 
-    // === Action buttons ===
-    area.removeFromTop(6);
-    auto btnRow = area.removeFromTop(30);
-    int btnW = btnRow.getWidth() / 5;
-    int btnW5 = btnRow.getWidth() / 5;
-    generateButton.setBounds(btnRow.removeFromLeft(btnW5).reduced(2));
-    variationButton.setBounds(btnRow.removeFromLeft(btnW5).reduced(2));
-    exportMidiBtn.setBounds(btnRow.removeFromLeft(btnW5).reduced(2));
-    importMidiBtn.setBounds(btnRow.removeFromLeft(btnW5).reduced(2));
-    quickSaveDirBtn.setBounds(btnRow.removeFromRight(24).reduced(2));
-    copyMidiBtn.setBounds(btnRow.reduced(2));
+    placeKnob(densitySlider, densityLabel, "DENSITY", k1);
+    placeKnob(acidSlider, acidLabel, "ACID", k2);
+    placeKnob(ornamentSlider, ornamentLabel, "ORNAMENT", k3);
+    placeKnob(graceSlider, graceLabel, "GRACE", k4);
+    placeKnob(rhythmVarSlider, rhythmLabel, "RHYTHM", k5);
+    placeKnob(pitchRangeSlider, pitchLabel, "PITCH RNG", k6);
 
-    // === Zoom + Preview row ===
+    // Right panel: Subgenre pills + Bass Style / Voicing Style
+    rightPanel = rightPanel.reduced(4, 4);
+    // Subgenre pills (2x2 grid)
+    auto pillArea = rightPanel.removeFromTop(38);
+    int pillHalfW = pillArea.getWidth() / 2;
+    auto pillRow1 = pillArea.removeFromTop(19);
+    auto pillRow2 = pillArea;
+    subGoaBtn.setBounds(pillRow1.removeFromLeft(pillHalfW).reduced(1, 1));
+    subFullOnBtn.setBounds(pillRow1.reduced(1, 1));
+    subDarkBtn.setBounds(pillRow2.removeFromLeft(pillHalfW).reduced(1, 1));
+    subProgBtn.setBounds(pillRow2.reduced(1, 1));
+
+    rightPanel.removeFromTop(4);
+
+    // Bass Style / Voicing Style (below subgenre, when applicable)
+    if (bassStyleSelector.isVisible()) {
+        bassStyleLabel.setText("BASS STYLE", juce::dontSendNotification);
+        bassStyleLabel.setBounds(rightPanel.removeFromTop(12));
+        bassStyleLabel.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+        bassStyleLabel.setColour(juce::Label::textColourId, psyLnf.onSurfaceVariant);
+        bassStyleLabel.setJustificationType(juce::Justification::centredLeft);
+        bassStyleLabel.setVisible(true);
+        bassStyleSelector.setBounds(rightPanel.removeFromTop(22).reduced(0, 1));
+        voicingStyleLabel.setVisible(false);
+    } else if (voicingStyleSelector.isVisible()) {
+        voicingStyleLabel.setText("VOICING STYLE", juce::dontSendNotification);
+        voicingStyleLabel.setBounds(rightPanel.removeFromTop(12));
+        voicingStyleLabel.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+        voicingStyleLabel.setColour(juce::Label::textColourId, psyLnf.onSurfaceVariant);
+        voicingStyleLabel.setJustificationType(juce::Justification::centredLeft);
+        voicingStyleLabel.setVisible(true);
+        voicingStyleSelector.setBounds(rightPanel.removeFromTop(22).reduced(0, 1));
+        bassStyleLabel.setVisible(false);
+    } else {
+        bassStyleLabel.setVisible(false);
+        voicingStyleLabel.setVisible(false);
+    }
+
     area.removeFromTop(4);
-    auto zRow = area.removeFromTop(22);
-    int zw = 32;
-    zoomFitBtn.setBounds(zRow.removeFromLeft(zw).reduced(1)); zRow.removeFromLeft(4);
-    zoomOutXBtn.setBounds(zRow.removeFromLeft(zw).reduced(1));
-    zoomInXBtn.setBounds(zRow.removeFromLeft(zw).reduced(1)); zRow.removeFromLeft(4);
-    zoomOutYBtn.setBounds(zRow.removeFromLeft(zw).reduced(1));
-    zoomInYBtn.setBounds(zRow.removeFromLeft(zw).reduced(1)); zRow.removeFromLeft(8);
-    undoBtn.setBounds(zRow.removeFromLeft(40).reduced(1));
-    redoBtn.setBounds(zRow.removeFromLeft(40).reduced(1));
-    zRow.removeFromLeft(8);
-    previewToggle.setBounds(zRow.removeFromLeft(64));
-    previewWaveSelector.setBounds(zRow.removeFromLeft(95).reduced(1));
-    previewVolLabel.setBounds(zRow.removeFromLeft(28));
-    previewVolSlider.setBounds(zRow.removeFromLeft(60).reduced(1));
 
-    area.removeFromTop(4);
+    // ---- Piano roll (main area) ----
+    // Bottom: param lane + lane tabs
+    auto laneSection = area.removeFromBottom(80);
+    auto laneTabs = laneSection.removeFromTop(22);
+    int tabW = 80;
+    laneVelBtn.setBounds(laneTabs.removeFromLeft(tabW).reduced(0, 1));
+    lanePanBtn.setBounds(laneTabs.removeFromLeft(tabW).reduced(0, 1));
+    lanePitchBtn.setBounds(laneTabs.removeFromLeft(tabW).reduced(0, 1));
+    paramLane.setBounds(laneSection);
 
-    // === Parameter lane at bottom ===
-    auto laneArea = area.removeFromBottom(70);
-    auto laneHeader = laneArea.removeFromTop(18);
-    laneTypeSelector.setBounds(laneHeader.removeFromLeft(130).withTrimmedLeft(36));
-    paramLane.setBounds(laneArea);
-
-    // === Scrollbars ===
-    auto hScrollArea = area.removeFromBottom(7);
-    hScrollArea.removeFromRight(7);
+    // Scrollbars
+    auto hScrollArea = area.removeFromBottom(6);
+    hScrollArea.removeFromRight(6);
     hScrollBar.setBounds(hScrollArea);
-    auto vScrollArea = area.removeFromRight(7);
+    auto vScrollArea = area.removeFromRight(6);
     vScrollBar.setBounds(vScrollArea);
 
-    // === Piano roll ===
+    // Piano roll
     pianoRoll.setBounds(area);
+
+    // ---- Footer: action buttons + preview (full width including sidebar area) ----
+    auto footer = getLocalBounds().removeFromBottom(footerH);
+    footer = footer.reduced(4, 0);
+    footer.removeFromTop(4);
+
+    // Footer layout: all buttons uniform height, grouped by function
+    int btnH = footerH - 8;
+    int btnY = 2;
+
+    // Group 1: Generate (large) + Variation
+    int genW = 110;
+    int varW = 110;
+    generateButton.setBounds(footer.removeFromLeft(genW).reduced(1, btnY));
+    variationButton.setBounds(footer.removeFromLeft(varW).reduced(1, btnY));
+    footer.removeFromLeft(6);
+
+    // Group 2: Export/Import MIDI (same width)
+    int midiW = 86;
+    exportMidiBtn.setBounds(footer.removeFromLeft(midiW).reduced(1, btnY));
+    importMidiBtn.setBounds(footer.removeFromLeft(midiW).reduced(1, btnY));
+    footer.removeFromLeft(6);
+
+    // Undo/Redo moved to sidebar bottom
+
+    // Right side: Quick Save + dir
+    quickSaveDirBtn.setBounds(footer.removeFromRight(24).reduced(1, btnY));
+    copyMidiBtn.setBounds(footer.removeFromRight(82).reduced(1, btnY));
+    footer.removeFromRight(6);
+
+    // Preview controls
+    previewVolSlider.setBounds(footer.removeFromRight(120).reduced(1, btnY + 2));
+    previewVolLabel.setBounds(footer.removeFromRight(22).reduced(0, btnY));
+    previewWaveSelector.setBounds(footer.removeFromRight(82).reduced(1, btnY));
+    footer.removeFromRight(4);
+    previewWaveLabel.setBounds(footer.removeFromRight(36).reduced(0, btnY));
+    previewToggle.setBounds(footer.removeFromRight(100).reduced(0, btnY));
+
+    // Zoom buttons - overlay inside piano roll (top-right corner, local coords)
+    {
+        int prW = pianoRoll.getWidth();
+        int zw = 24, zh = 24, zPad = 6, zGap = 1;
+        int totalW = zw * 5 + zGap * 2 + 8 * 2 + 11 * 2;  // buttons + group gaps + label space
+        int zx = prW - totalW - zPad;
+        int zy = zPad;
+        zx += 11; // skip H label space
+        pianoRoll.zoomOutXBtn.setBounds(zx, zy, zw, zh); zx += zw + zGap;
+        pianoRoll.zoomInXBtn.setBounds(zx, zy, zw, zh);  zx += zw + 8 + 11; // gap + V label
+        pianoRoll.zoomOutYBtn.setBounds(zx, zy, zw, zh); zx += zw + zGap;
+        pianoRoll.zoomInYBtn.setBounds(zx, zy, zw, zh);  zx += zw + 8;
+        pianoRoll.zoomFitBtn.setBounds(zx, zy, zw, zh);
+    }
 }
 
 juce::AudioProcessorEditor* PsyMelodyProcessor::createEditor()

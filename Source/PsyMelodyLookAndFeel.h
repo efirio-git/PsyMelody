@@ -25,44 +25,44 @@ public:
         interBoldTf = juce::Typeface::createSystemTypefaceFor(
             BinaryData::InterBold_ttf, BinaryData::InterBold_ttfSize);
 
-        if (orbitronBoldTf) titleFont = juce::Font(orbitronBoldTf).withHeight(24.0f);
-        else titleFont = juce::Font(24.0f, juce::Font::bold);
+        if (orbitronBoldTf) titleFont = juce::Font(orbitronBoldTf).withHeight(22.0f);
+        else titleFont = juce::Font(22.0f, juce::Font::bold);
 
-        if (orbitronRegTf) sectionFont = juce::Font(orbitronRegTf).withHeight(11.0f);
-        else sectionFont = juce::Font(11.0f, juce::Font::bold);
+        if (orbitronRegTf) sectionFont = juce::Font(orbitronRegTf).withHeight(10.0f);
+        else sectionFont = juce::Font(10.0f, juce::Font::bold);
 
-        if (interMedTf) uiFont = juce::Font(interMedTf).withHeight(14.0f);
-        else uiFont = juce::Font(14.0f);
+        if (interMedTf) uiFont = juce::Font(interMedTf).withHeight(13.0f);
+        else uiFont = juce::Font(13.0f);
 
-        if (interBoldTf) uiFontBold = juce::Font(interBoldTf).withHeight(14.0f);
-        else uiFontBold = juce::Font(14.0f, juce::Font::bold);
+        if (interBoldTf) uiFontBold = juce::Font(interBoldTf).withHeight(13.0f);
+        else uiFontBold = juce::Font(13.0f, juce::Font::bold);
 
-        if (interRegTf) uiFontRegular = juce::Font(interRegTf).withHeight(13.0f);
-        else uiFontRegular = juce::Font(13.0f);
+        if (interRegTf) uiFontRegular = juce::Font(interRegTf).withHeight(12.0f);
+        else uiFontRegular = juce::Font(12.0f);
 
-        // Set Inter as default typeface for the whole LookAndFeel
         if (interRegTf)
             setDefaultSansSerifTypeface(interRegTf);
-        // Color scheme
-        setColour(juce::ResizableWindow::backgroundColourId, bg);
-        setColour(juce::ComboBox::backgroundColourId, panelBg);
-        setColour(juce::ComboBox::outlineColourId, border);
-        setColour(juce::ComboBox::textColourId, textLight);
-        setColour(juce::ComboBox::arrowColourId, accent);
-        setColour(juce::PopupMenu::backgroundColourId, panelBg);
-        setColour(juce::PopupMenu::textColourId, textLight);
-        setColour(juce::PopupMenu::highlightedBackgroundColourId, accent.withAlpha(0.3f));
+
+        // Color scheme - Neon Architect palette
+        setColour(juce::ResizableWindow::backgroundColourId, surface);
+        setColour(juce::ComboBox::backgroundColourId, surfaceLowest);
+        setColour(juce::ComboBox::outlineColourId, outlineVariant.withAlpha(0.15f));
+        setColour(juce::ComboBox::textColourId, primary);
+        setColour(juce::ComboBox::arrowColourId, primary);
+        setColour(juce::PopupMenu::backgroundColourId, surfaceContainerHigh);
+        setColour(juce::PopupMenu::textColourId, onSurface);
+        setColour(juce::PopupMenu::highlightedBackgroundColourId, primary.withAlpha(0.2f));
         setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
-        setColour(juce::PopupMenu::headerTextColourId, accent);
-        setColour(juce::TextButton::textColourOnId, juce::Colours::white);
-        setColour(juce::TextButton::textColourOffId, textLight);
-        setColour(juce::Label::textColourId, textDim);
-        setColour(juce::ScrollBar::thumbColourId, accent.withAlpha(0.4f));
+        setColour(juce::PopupMenu::headerTextColourId, primary);
+        setColour(juce::TextButton::textColourOnId, onSurface);
+        setColour(juce::TextButton::textColourOffId, onSurfaceVariant);
+        setColour(juce::Label::textColourId, onSurfaceVariant);
+        setColour(juce::ScrollBar::thumbColourId, primary.withAlpha(0.3f));
         setColour(juce::ScrollBar::trackColourId, juce::Colour(0x00000000));
     }
 
     // ============================================================
-    // Rotary Slider (Knob)
+    // Rotary Slider (Knob) - Neon Architect style
     // ============================================================
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                            float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
@@ -74,42 +74,47 @@ public:
         auto centreY = bounds.getCentreY();
         auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-        // Background circle
-        g.setColour(knobBg);
+        // Background circle - dark recessed
+        g.setColour(surfaceLowest);
         g.fillEllipse(centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
 
         // Arc track
         juce::Path arcTrack;
         arcTrack.addCentredArc(centreX, centreY, radius - 2.0f, radius - 2.0f,
                                 0.0f, rotaryStartAngle, rotaryEndAngle, true);
-        g.setColour(border);
+        g.setColour(surfaceContainerHigh);
         g.strokePath(arcTrack, juce::PathStrokeType(2.5f));
 
-        // Active arc
+        // Active arc with glow
         if (sliderPos > 0.0f) {
             juce::Path arcActive;
             arcActive.addCentredArc(centreX, centreY, radius - 2.0f, radius - 2.0f,
                                      0.0f, rotaryStartAngle, angle, true);
-            g.setColour(accent);
+            g.setColour(primary);
             g.strokePath(arcActive, juce::PathStrokeType(2.5f));
+
+            // Glow
+            g.setColour(primary.withAlpha(0.15f));
+            juce::Path arcGlow;
+            arcGlow.addCentredArc(centreX, centreY, radius - 1.0f, radius - 1.0f,
+                                   0.0f, rotaryStartAngle, angle, true);
+            g.strokePath(arcGlow, juce::PathStrokeType(6.0f));
         }
 
-        // Pointer line
-        juce::Path pointer;
-        auto pointerLen = radius * 0.6f;
-        pointer.addRoundedRectangle(-1.5f, -pointerLen, 3.0f, pointerLen, 1.5f);
-        g.setColour(juce::Colours::white);
-        g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centreX, centreY));
+        // Pointer - laser-wire style
+        auto pointerLen = radius * 0.65f;
+        float tipX = centreX + std::sin(angle) * pointerLen;
+        float tipY = centreY - std::cos(angle) * pointerLen;
+        g.setColour(primaryFixed);
+        g.drawLine(centreX, centreY, tipX, tipY, 1.5f);
 
-        // Glow on the tip
-        float tipX = centreX + std::sin(angle) * (radius - 6.0f);
-        float tipY = centreY - std::cos(angle) * (radius - 6.0f);
-        g.setColour(accent.withAlpha(0.5f));
-        g.fillEllipse(tipX - 3.0f, tipY - 3.0f, 6.0f, 6.0f);
+        // Glow dot at tip
+        g.setColour(primary.withAlpha(0.6f));
+        g.fillEllipse(tipX - 2.5f, tipY - 2.5f, 5.0f, 5.0f);
     }
 
     // ============================================================
-    // Linear Slider
+    // Linear Slider - Laser-wire style
     // ============================================================
     void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
                            float sliderPos, float /*minSliderPos*/, float /*maxSliderPos*/,
@@ -117,32 +122,67 @@ public:
     {
         if (style == juce::Slider::LinearHorizontal) {
             auto trackY = (float)y + (float)height * 0.5f;
-            auto trackH = 4.0f;
+            auto trackH = 2.0f;
 
-            // Track background
-            g.setColour(border);
-            g.fillRoundedRectangle((float)x, trackY - trackH * 0.5f, (float)width, trackH, 2.0f);
+            // Track background - recessed
+            g.setColour(surfaceLowest);
+            g.fillRect((float)x, trackY - trackH * 0.5f, (float)width, trackH);
 
-            // Active portion
+            // Active fill with gradient glow
             float activeW = sliderPos - (float)x;
             if (activeW > 0) {
-                g.setColour(accent);
-                g.fillRoundedRectangle((float)x, trackY - trackH * 0.5f, activeW, trackH, 2.0f);
+                juce::ColourGradient grad(primaryDim, (float)x, trackY,
+                                           primary, sliderPos, trackY, false);
+                g.setGradientFill(grad);
+                g.fillRect((float)x, trackY - trackH * 0.5f, activeW, trackH);
+
+                // Glow
+                g.setColour(primary.withAlpha(0.2f));
+                g.fillRect((float)x, trackY - 3.0f, activeW, 6.0f);
             }
 
-            // Thumb
-            float thumbSize = 12.0f;
-            g.setColour(juce::Colours::white);
-            g.fillEllipse(sliderPos - thumbSize * 0.5f, trackY - thumbSize * 0.5f, thumbSize, thumbSize);
-            g.setColour(accent.withAlpha(0.3f));
-            g.fillEllipse(sliderPos - thumbSize, trackY - thumbSize, thumbSize * 2.0f, thumbSize * 2.0f);
+            // Handle - 1px laser-wire
+            g.setColour(primaryFixed);
+            g.fillRect(sliderPos - 0.5f, trackY - 6.0f, 1.0f, 12.0f);
+        } else if (style == juce::Slider::LinearBarVertical) {
+            // Draggable number display (Stitch style)
+            auto bounds = juce::Rectangle<float>((float)x, (float)y, (float)width, (float)height);
+            g.setColour(surfaceLowest);
+            g.fillRect(bounds);
+
+            // Split text into number and unit, draw with different colours/sizes
+            auto fullText = slider.getTextFromValue(slider.getValue());
+            auto spaceIdx = fullText.indexOfChar(' ');
+            if (spaceIdx >= 0) {
+                auto numPart = fullText.substring(0, spaceIdx);
+                auto unitPart = fullText.substring(spaceIdx);
+                auto numFont = uiFontBold.withHeight(16.0f);
+                auto unitFont = uiFontRegular.withHeight(11.0f);
+                float numW = numFont.getStringWidthFloat(numPart);
+                float unitW = unitFont.getStringWidthFloat(unitPart);
+                float startX = bounds.getX() + 6.0f;  // Left-aligned with padding
+                // Number in cyan (large)
+                g.setColour(primary);
+                g.setFont(numFont);
+                g.drawText(numPart, (int)startX, (int)bounds.getY(), (int)numW + 1, (int)bounds.getHeight(),
+                           juce::Justification::centredLeft);
+                // Unit in light grey (smaller)
+                g.setColour(onSurfaceVariant);
+                g.setFont(unitFont);
+                g.drawText(unitPart, (int)(startX + numW + 1), (int)bounds.getY(), (int)unitW + 2, (int)bounds.getHeight(),
+                           juce::Justification::centredLeft);
+            } else {
+                g.setColour(primary);
+                g.setFont(uiFontBold.withHeight(16.0f));
+                g.drawText(fullText, bounds.toNearestInt(), juce::Justification::centred);
+            }
         } else {
             LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos, 0, 0, style, slider);
         }
     }
 
     // ============================================================
-    // Buttons
+    // Buttons - Sharp corners (0px radius)
     // ============================================================
     void drawButtonBackground(juce::Graphics& g, juce::Button& button,
                                const juce::Colour& backgroundColour,
@@ -153,34 +193,38 @@ public:
         auto baseColour = backgroundColour;
 
         if (shouldDrawButtonAsDown)
-            baseColour = baseColour.brighter(0.2f);
+            baseColour = baseColour.brighter(0.15f);
         else if (shouldDrawButtonAsHighlighted)
-            baseColour = baseColour.brighter(0.1f);
+            baseColour = baseColour.brighter(0.08f);
 
-        // Gradient background
-        g.setGradientFill(juce::ColourGradient(
-            baseColour.brighter(0.1f), bounds.getX(), bounds.getY(),
-            baseColour.darker(0.1f), bounds.getX(), bounds.getBottom(), false));
-        g.fillRoundedRectangle(bounds, 5.0f);
+        // Flat background, sharp corners
+        g.setColour(baseColour);
+        g.fillRect(bounds);
 
-        // Subtle border
-        g.setColour(baseColour.brighter(0.2f).withAlpha(0.5f));
-        g.drawRoundedRectangle(bounds, 5.0f, 1.0f);
+        // Cyan border for active subgenre pills; ghost border for other buttons
+        auto textColour = button.findColour(juce::TextButton::textColourOffId);
+        if (textColour == primary && button.getComponentID() == "subgenre_pill") {
+            g.setColour(primary.withAlpha(0.6f));
+            g.drawRect(bounds, 1.0f);
+        } else if (backgroundColour.getAlpha() > 0 && backgroundColour != surfaceContainerLow) {
+            g.setColour(outlineVariant.withAlpha(0.15f));
+            g.drawRect(bounds, 1.0f);
+        }
 
-        // Glow effect when highlighted
+        // Cyan aura on hover
         if (shouldDrawButtonAsHighlighted) {
-            g.setColour(accent.withAlpha(0.1f));
-            g.fillRoundedRectangle(bounds.expanded(1.0f), 6.0f);
+            g.setColour(primary.withAlpha(0.06f));
+            g.fillRect(bounds.expanded(1.0f));
         }
     }
 
     juce::Font getTextButtonFont(juce::TextButton&, int buttonHeight) override
     {
-        return uiFont.withHeight(std::min(15.0f, (float)buttonHeight * 0.65f));
+        return uiFontBold.withHeight(std::min(13.0f, (float)buttonHeight * 0.6f));
     }
 
     // ============================================================
-    // ComboBox
+    // ComboBox - Sharp corners, recessed
     // ============================================================
     void drawComboBox(juce::Graphics& g, int width, int height, bool /*isButtonDown*/,
                        int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
@@ -188,10 +232,16 @@ public:
     {
         auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height);
 
-        g.setColour(panelBg);
-        g.fillRoundedRectangle(bounds, 4.0f);
-        g.setColour(border);
-        g.drawRoundedRectangle(bounds.reduced(0.5f), 4.0f, 1.0f);
+        // Recessed input field
+        g.setColour(surfaceLowest);
+        g.fillRect(bounds);
+
+        // Ghost border on hover
+        if (box.isMouseOver())
+            g.setColour(primary.withAlpha(0.3f));
+        else
+            g.setColour(outlineVariant.withAlpha(0.0f));
+        g.drawRect(bounds, 1.0f);
 
         // Arrow
         auto arrowArea = bounds.removeFromRight(20.0f).reduced(6.0f);
@@ -199,29 +249,34 @@ public:
         arrow.addTriangle(arrowArea.getX(), arrowArea.getCentreY() - 2.0f,
                           arrowArea.getRight(), arrowArea.getCentreY() - 2.0f,
                           arrowArea.getCentreX(), arrowArea.getCentreY() + 4.0f);
-        g.setColour(accent);
+        g.setColour(primary.withAlpha(0.6f));
         g.fillPath(arrow);
     }
 
-    juce::Font getComboBoxFont(juce::ComboBox&) override { return uiFont.withHeight(14.0f); }
-    juce::Font getPopupMenuFont() override { return uiFontRegular.withHeight(14.0f); }
+    juce::Font getComboBoxFont(juce::ComboBox&) override { return uiFont.withHeight(12.0f); }
+    juce::Font getPopupMenuFont() override { return uiFontRegular.withHeight(13.0f); }
+
+    void getIdealPopupMenuItemSize(const juce::String& text, bool isSeparator,
+                                    int standardMenuItemHeight, int& idealWidth, int& idealHeight) override
+    {
+        juce::LookAndFeel_V4::getIdealPopupMenuItemSize(text, isSeparator, standardMenuItemHeight, idealWidth, idealHeight);
+        if (!isSeparator)
+            idealHeight = 28;
+    }
 
     void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override
     {
-        g.fillAll(panelBg);
-        g.setColour(border);
-        g.drawRect(0, 0, width, height);
+        g.fillAll(surfaceContainerHigh);
+        g.setColour(primary.withAlpha(0.08f));
+        g.drawRect(0, 0, width, height, 1);
     }
 
     void drawPopupMenuSectionHeader(juce::Graphics& g, const juce::Rectangle<int>& area,
                                      const juce::String& sectionName) override
     {
-        g.setColour(accent.withAlpha(0.7f));
-        g.setFont(uiFontBold.withHeight(13.0f));
-        g.drawText(sectionName, area.reduced(8, 0), juce::Justification::centredLeft);
-        g.setColour(border);
-        g.drawLine((float)area.getX() + 8, (float)area.getBottom() - 1,
-                   (float)area.getRight() - 8, (float)area.getBottom() - 1, 0.5f);
+        g.setColour(primary.withAlpha(0.7f));
+        g.setFont(sectionFont.withHeight(10.0f));
+        g.drawText(sectionName.toUpperCase(), area.reduced(8, 0), juce::Justification::centredLeft);
     }
 
     // ============================================================
@@ -233,13 +288,11 @@ public:
         auto bounds = button.getLocalBounds().toFloat();
         auto toggleArea = bounds.removeFromLeft(bounds.getHeight()).reduced(4.0f);
 
-        // Toggle background
-        g.setColour(button.getToggleState() ? accent : border);
-        g.fillRoundedRectangle(toggleArea, 3.0f);
+        g.setColour(button.getToggleState() ? primary : surfaceContainerHigh);
+        g.fillRect(toggleArea);
 
-        // Check mark
         if (button.getToggleState()) {
-            g.setColour(juce::Colours::white);
+            g.setColour(juce::Colour(0xff005762));
             auto tick = toggleArea.reduced(3.0f);
             juce::Path check;
             check.startNewSubPath(tick.getX(), tick.getCentreY());
@@ -248,9 +301,8 @@ public:
             g.strokePath(check, juce::PathStrokeType(2.0f));
         }
 
-        // Label
-        g.setColour(textLight);
-        g.setFont(uiFont.withHeight(13.0f));
+        g.setColour(onSurfaceVariant);
+        g.setFont(uiFont.withHeight(12.0f));
         g.drawText(button.getButtonText(), bounds.withTrimmedLeft(4), juce::Justification::centredLeft);
     }
 
@@ -273,16 +325,16 @@ public:
                         bool isScrollbarVertical, int thumbStartPosition, int thumbSize,
                         bool isMouseOver, bool /*isMouseDown*/) override
     {
-        auto thumbColour = accent.withAlpha(isMouseOver ? 0.5f : 0.3f);
+        auto thumbColour = primary.withAlpha(isMouseOver ? 0.4f : 0.2f);
 
         if (isScrollbarVertical) {
             g.setColour(thumbColour);
-            g.fillRoundedRectangle((float)x + 1, (float)thumbStartPosition,
-                                    (float)width - 2, (float)thumbSize, 3.0f);
+            g.fillRect((float)x + 1, (float)thumbStartPosition,
+                       (float)width - 2, (float)thumbSize);
         } else {
             g.setColour(thumbColour);
-            g.fillRoundedRectangle((float)thumbStartPosition, (float)y + 1,
-                                    (float)thumbSize, (float)height - 2, 3.0f);
+            g.fillRect((float)thumbStartPosition, (float)y + 1,
+                       (float)thumbSize, (float)height - 2);
         }
     }
 
@@ -292,47 +344,75 @@ public:
     juce::Label* createSliderTextBox(juce::Slider& slider) override
     {
         auto* l = LookAndFeel_V4::createSliderTextBox(slider);
-        l->setColour(juce::Label::textColourId, textLight);
+        l->setColour(juce::Label::textColourId, primary);
         l->setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
         l->setColour(juce::Label::outlineColourId, juce::Colours::transparentBlack);
-        l->setFont(uiFontRegular.withHeight(12.0f));
+        l->setFont(uiFontRegular.withHeight(10.0f));
         return l;
     }
 
     // ============================================================
-    // Helper: Draw panel background
+    // Helpers
     // ============================================================
-    static void drawPanel(juce::Graphics& g, juce::Rectangle<float> bounds,
-                           float cornerSize = 6.0f)
+    static void drawPanel(juce::Graphics& g, juce::Rectangle<float> bounds, juce::Colour colour)
     {
-        g.setColour(juce::Colour(0xff161630));
-        g.fillRoundedRectangle(bounds, cornerSize);
-        g.setColour(juce::Colour(0xff2a2a50).withAlpha(0.5f));
-        g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
+        g.setColour(colour);
+        g.fillRect(bounds);
     }
 
     void drawSectionHeader(juce::Graphics& g, int x, int y, int width,
                             const juce::String& text)
     {
-        g.setColour(juce::Colour(0xff00dda0));
-        g.setFont(sectionFont);
-        g.drawText(text, x, y, width, 14, juce::Justification::centredLeft);
-        // Gradient line
-        juce::ColourGradient grad(juce::Colour(0xff00dda0).withAlpha(0.6f), (float)x, 0,
-                                   juce::Colour(0xff00dda0).withAlpha(0.0f), (float)(x + width), 0, false);
-        g.setGradientFill(grad);
-        g.fillRect(x, y + 14, width, 1);
+        g.setColour(primary);
+        g.setFont(sectionFont.withHeight(10.0f));
+        g.drawText(text.toUpperCase(), x, y, width, 12, juce::Justification::centredLeft);
     }
 
-    // Color palette
-    juce::Colour bg       {0xff0e0e20};
-    juce::Colour panelBg  {0xff18183a};
-    juce::Colour border   {0xff2a2a55};
-    juce::Colour accent   {0xff00dda0};  // Teal/cyan
-    juce::Colour accent2  {0xff7744ff};  // Purple
-    juce::Colour textLight{0xffe0e0e8};
-    juce::Colour textDim  {0xff8888aa};
-    juce::Colour knobBg   {0xff1e1e40};
+    void drawParamCard(juce::Graphics& g, juce::Rectangle<float> bounds)
+    {
+        g.setColour(surfaceContainerHigh);
+        g.fillRect(bounds);
+    }
+
+    // ============================================================
+    // Neon Architect Color Palette
+    // ============================================================
+    // Surface hierarchy
+    juce::Colour surface             {0xff0e0e13};
+    juce::Colour surfaceContainerLow {0xff131319};
+    juce::Colour surfaceContainer    {0xff19191f};
+    juce::Colour surfaceContainerHigh{0xff1f1f26};
+    juce::Colour surfaceHighest      {0xff25252d};
+    juce::Colour surfaceBright       {0xff2c2b33};
+    juce::Colour surfaceLowest       {0xff000000};
+
+    // Neon accent colors
+    juce::Colour primary      {0xff81ecff};  // Cyan
+    juce::Colour primaryDim   {0xff00d4ec};
+    juce::Colour primaryFixed {0xff00e3fd};
+    juce::Colour secondary    {0xffff59e3};  // Magenta
+    juce::Colour secondaryDim {0xffad009b};
+    juce::Colour tertiary     {0xffba84ff};  // Purple
+    juce::Colour tertiaryDim  {0xff993fff};
+
+    // Text / on-surface
+    juce::Colour onSurface        {0xfff9f5fd};
+    juce::Colour onSurfaceVariant {0xffacaab1};
+    juce::Colour outline          {0xff76747b};
+    juce::Colour outlineVariant   {0xff48474d};
+
+    // Error
+    juce::Colour error {0xffff716c};
+
+    // Legacy aliases for compatibility
+    juce::Colour bg       = surface;
+    juce::Colour panelBg  = surfaceContainerLow;
+    juce::Colour border   = outlineVariant;
+    juce::Colour accent   = primary;
+    juce::Colour accent2  = tertiary;
+    juce::Colour textLight = onSurface;
+    juce::Colour textDim  = onSurfaceVariant;
+    juce::Colour knobBg   = surfaceLowest;
 
     // Typeface storage
     juce::Typeface::Ptr orbitronBoldTf, orbitronRegTf;

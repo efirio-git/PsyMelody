@@ -29,7 +29,7 @@ public:
         int numLines = 1;
         for (int i = 0; i < text.length(); ++i)
             if (text[i] == '\n') numLines++;
-        int h = numLines * lineH + 60;
+        int h = numLines * lineH + 10;
         setSize(getWidth(), std::max(h, 100));
     }
 
@@ -38,13 +38,13 @@ public:
         auto area = getLocalBounds().reduced(12, 8);
 
         if (isManual && title.isNotEmpty()) {
-            g.setColour(juce::Colour(0xff00cc88));
+            g.setColour(juce::Colour(0xff81ecff));  // primary
             g.setFont(titleFont);
             g.drawText(title, area.removeFromTop(22), juce::Justification::centredLeft);
             area.removeFromTop(6);
         }
 
-        g.setColour(juce::Colour(0xffcccccc));
+        g.setColour(juce::Colour(0xfff9f5fd));  // on-surface
         g.setFont(textFont);
         g.drawFittedText(text, area, juce::Justification::topLeft, 200);
     }
@@ -69,8 +69,8 @@ public:
 
         manualBtn.onClick = [this] { currentTab = Tab::Manual; updateContent(); };
         aboutBtn.onClick = [this] { currentTab = Tab::About; updateContent(); };
-        manualBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff334466));
-        aboutBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff334466));
+        manualBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
+        aboutBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
         addAndMakeVisible(manualBtn);
         addAndMakeVisible(aboutBtn);
 
@@ -116,14 +116,14 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1a1a2e));
+        g.fillAll(juce::Colour(0xff0e0e13));  // surface
 
-        g.setColour(juce::Colour(0xff00ff88));
+        g.setColour(juce::Colour(0xff81ecff));  // primary
         g.setFont(getFontForLang(20.0f, juce::Font::bold));
         g.drawText(tr(currentLang, Str::Settings),
                    getLocalBounds().removeFromTop(36), juce::Justification::centred);
 
-        g.setColour(juce::Colour(0xffcccccc));
+        g.setColour(juce::Colour(0xffacaab1));  // on-surface-variant
         g.setFont(getFontForLang(13.0f));
         g.drawText(tr(currentLang, Str::Language) + ":",
                    20, 50, 80, 24, juce::Justification::centredLeft);
@@ -131,8 +131,8 @@ public:
         // Content background
         auto contentArea = getLocalBounds().reduced(16);
         contentArea.removeFromTop(110);
-        g.setColour(juce::Colour(0xff12122a));
-        g.fillRoundedRectangle(contentArea.toFloat(), 6.0f);
+        g.setColour(juce::Colour(0xff131319));  // surface-container-low
+        g.fillRect(contentArea);  // sharp corners
     }
 
     void resized() override
