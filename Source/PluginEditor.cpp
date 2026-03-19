@@ -1155,6 +1155,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     addAndMakeVisible(voicingStyleSelector);
 
     // Preview synth controls
+    previewToggle.setComponentID("preview_toggle");
     previewToggle.setColour(juce::ToggleButton::textColourId, juce::Colour(0xffcccccc));
     previewToggle.onClick = [this] { psyProcessor.setPreviewEnabled(previewToggle.getToggleState()); };
     addAndMakeVisible(previewToggle);
@@ -2179,7 +2180,7 @@ void PsyMelodyEditor::resized()
     // Preview controls
     previewVolSlider.setBounds(footer.removeFromRight(120).reduced(1, btnY + 2));
     previewVolLabel.setBounds(footer.removeFromRight(22).reduced(0, btnY));
-    previewWaveSelector.setBounds(footer.removeFromRight(82).reduced(1, btnY));
+    previewWaveSelector.setBounds(footer.removeFromRight(82).reduced(1, btnY + 3));
     footer.removeFromRight(4);
     previewWaveLabel.setBounds(footer.removeFromRight(36).reduced(0, btnY));
     previewToggle.setBounds(footer.removeFromRight(100).reduced(0, btnY));
