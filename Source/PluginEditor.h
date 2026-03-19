@@ -44,11 +44,11 @@ private:
     float xForBeat(double beat) const { return (float)beat * beatWidth() - scrollX; }
     int findNoteNear(float x) const;
 
-    juce::Colour bgColour     {0xff0a0a16};
-    juce::Colour barLineColour{0xff333355};
-    juce::Colour velColour    {0xff00cc66};
-    juce::Colour panColour    {0xff44aaff};
-    juce::Colour pitchColour  {0xffff6644};
+    juce::Colour bgColour     {0xff0e0e13};
+    juce::Colour barLineColour{0xff48474d};
+    juce::Colour velColour    {0xff81ecff};
+    juce::Colour panColour    {0xffba84ff};
+    juce::Colour pitchColour  {0xffff59e3};
 };
 
 // Editable piano roll display with playback cursor and zoom
@@ -56,6 +56,9 @@ class PianoRollView : public juce::Component,
                       public juce::Timer {
 public:
     PianoRollView();
+    // Zoom overlay buttons (owned by PianoRollView, drawn with icons)
+    juce::TextButton zoomOutXBtn, zoomInXBtn, zoomOutYBtn, zoomInYBtn, zoomFitBtn;
+    void paintOverChildren(juce::Graphics& g) override;
     void setNoteEvents(const std::vector<PsyMelody::NoteEvent>& events, int bars);
     void setProcessor(PsyMelodyProcessor* p) { processor = p; }
     void clearSelection() { selectedNotes.clear(); repaint(); }
@@ -123,10 +126,10 @@ private:
     void recalcNoteRange();
     double snapToGrid(double beat) const { return std::round(beat * 4.0) / 4.0; }
 
-    juce::Colour bgColour{0xff0d0d1a}, gridColour{0xff222244}, barLineColour{0xff444466};
-    juce::Colour noteColour{0xff00cc66}, accentColour{0xffff6644}, slideColour{0xff44aaff};
-    juce::Colour graceColour{0xffaa66ff}, cursorColour{0xffff4488};
-    juce::Colour selectedColour{0xffffff44}, resizeColour{0xffff8800};
+    juce::Colour bgColour{0xff0e0e13}, gridColour{0xff1f1f26}, barLineColour{0xff48474d};
+    juce::Colour noteColour{0xff00d4ec}, accentColour{0xffff59e3}, slideColour{0xff4dd8a5};
+    juce::Colour graceColour{0xffcf9fff}, cursorColour{0xff81ecff};
+    juce::Colour selectedColour{0xffffff44}, resizeColour{0xffff59e3};
 };
 
 class PsyMelodyEditor : public juce::AudioProcessorEditor,
@@ -135,6 +138,7 @@ public:
     explicit PsyMelodyEditor(PsyMelodyProcessor&);
     ~PsyMelodyEditor() override;
     void paint(juce::Graphics&) override;
+    void paintOverChildren(juce::Graphics&) override;
     void resized() override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
 
@@ -150,7 +154,7 @@ private:
 
     std::vector<PsyMelody::Preset> presets;
     juce::ComboBox presetSelector;
-    juce::TextButton savePresetBtn{"Save"};
+    juce::TextButton savePresetBtn{""};
     juce::Label presetLabel;
 
     PianoRollView pianoRoll;
@@ -158,9 +162,7 @@ private:
     juce::ComboBox laneTypeSelector;
     juce::Label laneLabel;
 
-    juce::TextButton zoomInXBtn{"H+"}, zoomOutXBtn{"H-"};
-    juce::TextButton zoomInYBtn{"V+"}, zoomOutYBtn{"V-"};
-    juce::TextButton zoomFitBtn{"Fit"};
+    // Zoom buttons are now owned by pianoRoll
     juce::ScrollBar hScrollBar{false};
     juce::ScrollBar vScrollBar{true};
 
@@ -168,21 +170,41 @@ private:
     juce::ComboBox subgenreSelector, genModeSelector;
     juce::ComboBox bassStyleSelector, voicingStyleSelector;
     juce::ComboBox previewWaveSelector;
-    juce::ToggleButton previewToggle{"Preview"};
+    juce::ToggleButton previewToggle{juce::String::charToString(0x25B6) + " PREVIEW"};
     juce::Slider previewVolSlider;
     juce::Slider densitySlider, acidSlider, ornamentSlider, graceSlider;
     juce::Slider rhythmVarSlider, pitchRangeSlider, phraseLengthSlider, octaveSlider;
-    juce::TextButton importMidiBtn{"Import MIDI"};
-    juce::TextButton generateButton{"Generate"}, variationButton{"Variation"};
-    juce::TextButton undoBtn{"Undo"}, redoBtn{"Redo"};
-    juce::TextButton exportMidiBtn{"Export MIDI"}, copyMidiBtn{"Quick Save"}, quickSaveDirBtn{"..."};
+    juce::Slider bpmSlider;
+    juce::Label bpmLabel;
+    juce::TextButton importMidiBtn{"IMPORT MIDI"};
+    juce::TextButton generateButton{"GENERATE"}, variationButton{"VARIATION"};
+    juce::TextButton undoBtn{""}, redoBtn{""};
+    juce::TextButton exportMidiBtn{"EXPORT MIDI"}, copyMidiBtn{"QUICK SAVE"}, quickSaveDirBtn{"..."};
+
+    // Sidebar navigation buttons
+    juce::TextButton navMelodyBtn{""}, navBasslineBtn{""};
+    juce::TextButton navChordBtn{""}, navManualBtn{""};
+    int activeNavIndex = 0;
+    void updateNavSelection();
+
+    // Subgenre pill buttons
+    juce::TextButton subGoaBtn{"GOA"}, subFullOnBtn{"FULL-ON"};
+    juce::TextButton subDarkBtn{"DARK PSY"}, subProgBtn{"PROGRESSIVE"};
+    void updateSubgenreSelection();
+
+    // Lane tab buttons
+    juce::TextButton laneVelBtn{"VELOCITY"}, lanePanBtn{"PAN"}, lanePitchBtn{"PITCH BEND"};
+    void updateLaneTabSelection();
 
     juce::Label rootLabel, scaleLabel, patternLabel, progressionLabel, densityLabel;
     juce::Label acidLabel, ornamentLabel, graceLabel, rhythmLabel, pitchLabel, phraseLabel, octaveLabel;
-    juce::Label subgenreLabel, genModeLabel, bassStyleLabel, voicingStyleLabel, previewVolLabel;
+    juce::Label subgenreLabel, genModeLabel, bassStyleLabel, voicingStyleLabel, previewVolLabel, previewWaveLabel;
 
-    juce::File quickSaveDir;  // Quick save directory for Copy MIDI
-    int sectionPresetY = 0, sectionGenY = 0, sectionExpY = 0; // section header Y positions
+    juce::File quickSaveDir;
+    std::shared_ptr<juce::FileChooser> activeFileChooser;  // prevent premature destruction
+    static constexpr int sidebarW = 72;
+    static constexpr int headerH = 48;
+    static constexpr int footerH = 40;
 
     void setupSlider(juce::Slider&, juce::Label&, const juce::String&, double, double, double, double step=0.01);
     void syncFromParams();
