@@ -7,14 +7,17 @@
 
 ### Using the Installer (Recommended)
 
-1. Double-click `PsyMelody_v0.1.0_Installer.pkg`
-2. Follow the on-screen instructions
-3. Select the components you want to install:
-   - **VST3 Plugin** - For FL Studio, Ableton Live, Cubase, Studio One, etc.
-   - **Audio Unit Plugin** - For Logic Pro, GarageBand
-   - **Standalone Application** - For use without a DAW
-4. Click Install
+1. Open `PsyMelody_v0.1.0.dmg`
+2. Double-click `PsyMelody_Installer.pkg`
+3. Follow the on-screen instructions
+4. The installer will place:
+   - **VST3 Plugin** → `/Library/Audio/Plug-Ins/VST3/`
+   - **Audio Unit Plugin** → `/Library/Audio/Plug-Ins/Components/`
 5. Restart your DAW
+
+### Uninstalling
+
+Run `Uninstall_PsyMelody.command` included in the DMG.
 
 ### Manual Installation
 
@@ -24,7 +27,6 @@ Copy the plugin files to the following locations:
 |--------|---------|
 | **PsyMelody.vst3** | `/Library/Audio/Plug-Ins/VST3/` |
 | **PsyMelody.component** | `/Library/Audio/Plug-Ins/Components/` |
-| **PsyMelody.app** | `/Applications/` |
 
 ---
 
@@ -180,9 +182,9 @@ Copy the plugin files to the following locations:
 
 PsyMelody includes a built-in preview synthesizer so you can hear melodies without an external synth:
 
-1. Click the **Preview** checkbox in the toolbar (next to Fit/H-/H+)
-2. Select a waveform: **Saw** / **Square** / **Sine** / **Triangle**
-3. Adjust **Vol** slider
+1. Click the **▶ PREVIEW** toggle in the footer bar
+2. Select an oscillator waveform from the **OSC** dropdown: **Saw** / **Square** / **Sine** / **Triangle**
+3. Adjust volume with the **speaker icon slider**
 4. Press Play in your DAW
 
 > **Note:** The preview synth is for auditioning only.
@@ -227,7 +229,7 @@ PsyMelody includes a built-in preview synthesizer so you can hear melodies witho
 
 - **OS:** macOS 10.15 (Catalina) or later
 - **Architecture:** Apple Silicon or Intel (Universal Binary)
-- **Formats:** VST3, Audio Unit, Standalone
+- **Formats:** VST3, Audio Unit
 - **DAW:** Any VST3 or AU compatible DAW
 
 ---
@@ -238,7 +240,6 @@ PsyMelody includes a built-in preview synthesizer so you can hear melodies witho
 |------|------|
 | VST3 Plugin | `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3` |
 | AU Plugin | `/Library/Audio/Plug-Ins/Components/PsyMelody.component` |
-| Standalone App | `/Applications/PsyMelody.app` |
 | User Presets | `~/Documents/EDEN/PsyMelody/Presets/` |
 
 ---

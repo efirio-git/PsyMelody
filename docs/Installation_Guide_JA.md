@@ -7,14 +7,17 @@
 
 ### インストーラーを使用（推奨）
 
-1. `PsyMelody_v0.1.0_Installer.pkg` をダブルクリック
-2. 画面の指示に従ってインストール
-3. インストールするコンポーネントを選択:
-   - **VST3 Plugin** - FL Studio, Ableton Live, Cubase, Studio One等
-   - **Audio Unit Plugin** - Logic Pro, GarageBand
-   - **Standalone Application** - DAWなしで使用
-4. インストールをクリック
+1. `PsyMelody_v0.1.0.dmg` を開く
+2. `PsyMelody_Installer.pkg` をダブルクリック
+3. 画面の指示に従ってインストール
+4. 以下がインストールされます:
+   - **VST3 Plugin** → `/Library/Audio/Plug-Ins/VST3/`
+   - **Audio Unit Plugin** → `/Library/Audio/Plug-Ins/Components/`
 5. DAWを再起動
+
+### アンインストール
+
+DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 
 ### 手動インストール
 
@@ -24,7 +27,6 @@
 |------------|---------|
 | **PsyMelody.vst3** | `/Library/Audio/Plug-Ins/VST3/` |
 | **PsyMelody.component** | `/Library/Audio/Plug-Ins/Components/` |
-| **PsyMelody.app** | `/Applications/` |
 
 ---
 
@@ -168,9 +170,9 @@
 
 外部シンセなしでメロディを試聴できる内蔵シンセ:
 
-1. ツールバーの **Preview** チェックボックスをクリック
-2. 波形を選択: **Saw** / **Square** / **Sine** / **Triangle**
-3. **Vol** スライダーで音量調整
+1. フッターバーの **▶ PREVIEW** トグルをクリック
+2. **OSC** ドロップダウンからオシレーター波形を選択: **Saw** / **Square** / **Sine** / **Triangle**
+3. **スピーカーアイコンのスライダー** で音量調整
 4. DAWのPlayを押す
 
 > **注意:** プレビューシンセは試聴用です。
@@ -215,7 +217,7 @@
 
 - **OS:** macOS 10.15 (Catalina) 以降
 - **アーキテクチャ:** Apple Silicon または Intel（Universal Binary）
-- **フォーマット:** VST3, Audio Unit, Standalone
+- **フォーマット:** VST3, Audio Unit
 - **DAW:** VST3またはAU対応の任意のDAW
 
 ---
@@ -226,7 +228,6 @@
 |------|------|
 | VST3プラグイン | `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3` |
 | AUプラグイン | `/Library/Audio/Plug-Ins/Components/PsyMelody.component` |
-| スタンドアロン | `/Applications/PsyMelody.app` |
 | ユーザープリセット | `~/Documents/EDEN/PsyMelody/Presets/` |
 
 ---
