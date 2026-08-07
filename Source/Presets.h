@@ -13,9 +13,10 @@ struct Preset {
     bool hasSequence() const { return !sequence.empty(); }
 };
 
-// Field order in GeneratorParams:
+// Field order in GeneratorParams (positional aggregate init - trailing fields
+// omitted here, e.g. humanize/swing, take their in-struct defaults):
 // rootNote, scaleIndex, bpm, phraseLengthBars, baseOctave,
-// patternCategory, progression,
+// patternCategory, progression, subgenre,
 // density, acidAmount, ornamentAmount, graceAmount, rhythmVariation, pitchRange
 
 inline std::vector<Preset> getFactoryPresets()

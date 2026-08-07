@@ -52,6 +52,172 @@ private:
     juce::Colour pitchColour  {0xffff59e3};
 };
 
+// Split EXPORT MIDI button: the main area opens the save dialog on click,
+// the grip zone on the right (⁙ dots) starts an OS file drag carrying a
+// freshly written temp .mid that can be dropped into the DAW
+class DraggableExportButton : public juce::TextButton {
+public:
+    using juce::TextButton::TextButton;
+
+    // Returns the file to drag, or an invalid File to skip the drag
+    std::function<juce::File()> prepareDragFile;
+
+    static constexpr int gripWidth = 22;
+
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        gripPressed = isInGrip(e.getPosition());
+        juce::TextButton::mouseDown(e);
+    }
+
+    void mouseDrag(const juce::MouseEvent& e) override
+    {
+        if (gripPressed && !dragStarted && prepareDragFile
+            && e.getDistanceFromDragStart() > 6) {
+            dragStarted = true;
+            auto file = prepareDragFile();
+            if (file.existsAsFile())
+                juce::DragAndDropContainer::performExternalDragDropOfFiles(
+                    { file.getFullPathName() }, false, this);
+        }
+        juce::TextButton::mouseDrag(e);
+    }
+
+    void mouseUp(const juce::MouseEvent& e) override
+    {
+        // Grip presses never fire the click action - the grip is drag-only,
+        // and a completed external drag must not open the save dialog either
+        bool suppressClick = dragStarted || gripPressed;
+        dragStarted = false;
+        gripPressed = false;
+        if (suppressClick) {
+            setState(buttonNormal);
+            return;
+        }
+        juce::TextButton::mouseUp(e);
+    }
+
+    void mouseMove(const juce::MouseEvent& e) override
+    {
+        setMouseCursor(isInGrip(e.getPosition())
+                           ? juce::MouseCursor::DraggingHandCursor
+                           : juce::MouseCursor::NormalCursor);
+        repaint();
+        juce::TextButton::mouseMove(e);
+    }
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override
+    {
+        // Background via the LookAndFeel, but the label drawn ourselves so it
+        // centers in the area left of the grip instead of underneath it
+        auto& lf = getLookAndFeel();
+        lf.drawButtonBackground(g, *this,
+                                findColour(getToggleState() ? buttonOnColourId
+                                                            : buttonColourId),
+                                highlighted, down);
+        g.setFont(lf.getTextButtonFont(*this, getHeight()));
+        g.setColour(findColour(getToggleState() ? textColourOnId : textColourOffId)
+                        .withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
+        g.drawFittedText(getButtonText(),
+                         getLocalBounds().withTrimmedRight(gripWidth).reduced(4, 2),
+                         juce::Justification::centred, 1);
+
+        auto zone = getLocalBounds().removeFromRight(gripWidth);
+        // Background shift instead of a border line (design rule)
+        g.setColour(juce::Colour(0xff15151b));
+        g.fillRect(zone);
+
+        bool hoverGrip = isMouseOver() && isInGrip(getMouseXYRelative());
+        auto dotColour = hoverGrip ? juce::Colour(0xff81ecff)
+                                   : juce::Colour(0xff76747b);
+        if (hoverGrip) {
+            g.setColour(dotColour.withAlpha(0.15f));
+            g.fillRect(zone);
+        }
+        g.setColour(dotColour);
+        // 2x3 dot grid (⁙)
+        float cx = (float)zone.getCentreX(), cy = (float)zone.getCentreY();
+        for (int row = -1; row <= 1; ++row)
+            for (int col = 0; col <= 1; ++col)
+                g.fillEllipse(cx - 4.5f + (float)col * 6.0f,
+                              cy + (float)row * 6.0f - 1.5f, 3.0f, 3.0f);
+    }
+
+private:
+    bool isInGrip(juce::Point<int> p) const { return p.x >= getWidth() - gripWidth; }
+
+    bool dragStarted = false;
+    bool gripPressed = false;
+};
+
+// Split GENERATE button: the main area generates on click, the ▾ zone on the
+// right opens a menu with partial-regeneration actions
+class GenerateSplitButton : public juce::TextButton {
+public:
+    using juce::TextButton::TextButton;
+
+    static constexpr int arrowWidth = 22;
+
+    // Invoked when the ▾ zone is pressed; the editor shows the menu
+    std::function<void()> onMenuRequested;
+
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        arrowPressed = isInArrow(e.getPosition());
+        juce::TextButton::mouseDown(e);
+        if (arrowPressed && onMenuRequested)
+            onMenuRequested();
+    }
+
+    void mouseUp(const juce::MouseEvent& e) override
+    {
+        // The arrow zone must not also fire the generate action
+        if (arrowPressed) {
+            arrowPressed = false;
+            setState(buttonNormal);
+            return;
+        }
+        juce::TextButton::mouseUp(e);
+    }
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override
+    {
+        auto& lf = getLookAndFeel();
+        lf.drawButtonBackground(g, *this,
+                                findColour(getToggleState() ? buttonOnColourId
+                                                            : buttonColourId),
+                                highlighted, down);
+        g.setFont(lf.getTextButtonFont(*this, getHeight()));
+        g.setColour(findColour(getToggleState() ? textColourOnId : textColourOffId)
+                        .withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
+        g.drawFittedText(getButtonText(),
+                         getLocalBounds().withTrimmedRight(arrowWidth).reduced(4, 2),
+                         juce::Justification::centred, 1);
+
+        auto zone = getLocalBounds().removeFromRight(arrowWidth);
+        // Background shift instead of a border line (design rule)
+        g.setColour(juce::Colour(0xff004450));
+        g.fillRect(zone);
+
+        bool hoverArrow = isMouseOver() && isInArrow(getMouseXYRelative());
+        g.setColour(hoverArrow ? juce::Colour(0xffcff6ff) : findColour(textColourOffId));
+        juce::Path arrow;
+        float cx = (float)zone.getCentreX(), cy = (float)zone.getCentreY();
+        arrow.addTriangle(cx - 4.0f, cy - 2.0f, cx + 4.0f, cy - 2.0f, cx, cy + 3.0f);
+        g.fillPath(arrow);
+    }
+
+    void mouseMove(const juce::MouseEvent& e) override
+    {
+        repaint();
+        juce::TextButton::mouseMove(e);
+    }
+
+private:
+    bool isInArrow(juce::Point<int> p) const { return p.x >= getWidth() - arrowWidth; }
+    bool arrowPressed = false;
+};
+
 // Editable piano roll display with playback cursor and zoom
 class PianoRollView : public juce::Component,
                       public juce::Timer {
@@ -154,6 +320,7 @@ private:
     PsyMelodyProcessor& psyProcessor;
     PsyMelodyLookAndFeel psyLnf;
     juce::uint32 lastSeenStateVersion = 0;
+    juce::TooltipWindow tooltipWindow{this};
 
     // Settings page
     PsyMelody::SettingsPage settingsPage;
@@ -183,12 +350,17 @@ private:
     juce::Slider previewVolSlider;
     juce::Slider densitySlider, acidSlider, ornamentSlider, graceSlider;
     juce::Slider rhythmVarSlider, pitchRangeSlider, phraseLengthSlider, octaveSlider;
+    juce::Slider humanizeSlider, swingSlider;
     juce::Slider bpmSlider;
     juce::Label bpmLabel;
+    juce::Label seedTitleLabel, seedValueLabel;
+    juce::TextButton seedLockBtn{""};
     juce::TextButton importMidiBtn{"IMPORT MIDI"};
-    juce::TextButton generateButton{"GENERATE"}, variationButton{"VARIATION"};
+    GenerateSplitButton generateButton{"GENERATE"};
+    juce::TextButton variationButton{"VARIATION"};
     juce::TextButton undoBtn{""}, redoBtn{""};
-    juce::TextButton exportMidiBtn{"EXPORT MIDI"}, copyMidiBtn{"QUICK SAVE"}, quickSaveDirBtn{"..."};
+    DraggableExportButton exportMidiBtn{"EXPORT MIDI"};
+    juce::TextButton copyMidiBtn{"QUICK SAVE"}, quickSaveDirBtn{"..."};
 
     // Sidebar navigation buttons
     juce::TextButton navMelodyBtn{""}, navBasslineBtn{""};
@@ -207,6 +379,7 @@ private:
 
     juce::Label rootLabel, scaleLabel, patternLabel, progressionLabel, densityLabel;
     juce::Label acidLabel, ornamentLabel, graceLabel, rhythmLabel, pitchLabel, phraseLabel, octaveLabel;
+    juce::Label humanizeLabel, swingLabel;
     juce::Label subgenreLabel, genModeLabel, bassStyleLabel, voicingStyleLabel, previewVolLabel, previewWaveLabel;
 
     juce::File quickSaveDir;
@@ -216,6 +389,9 @@ private:
     static constexpr int footerH = 40;
 
     void setupSlider(juce::Slider&, juce::Label&, const juce::String&, double, double, double, double step=0.01);
+    void applyTooltips();
+    void updateSeedDisplay();
+    void showRegenerateMenu();
     void syncFromParams();
     void syncToParams();
     void updatePianoRoll();
