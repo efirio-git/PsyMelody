@@ -957,6 +957,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         variationButton.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::Variation).toUpperCase());
         exportMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::ExportMidi).toUpperCase());
         copyMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::QuickSave).toUpperCase());
+        applyTooltips();
         repaint();
     };
     addChildComponent(settingsPage);  // addChild, NOT addAndMakeVisible
@@ -1379,6 +1380,18 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             }
         });
     };
+    exportMidiBtn.prepareDragFile = [this]() -> juce::File {
+        const auto& phrase = psyProcessor.getCurrentPhrase();
+        if (phrase.empty()) return {};
+        double bpm = psyProcessor.getGeneratorParams().bpm;
+        if (auto* ph = psyProcessor.getPlayHead())
+            if (auto pos = ph->getPosition())
+                if (auto b = pos->getBpm()) bpm = *b;
+        auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                        .getChildFile("PsyMelody.mid");
+        if (!PsyMelody::MidiExport::exportToFile(phrase, file, bpm)) return {};
+        return file;
+    };
     addAndMakeVisible(exportMidiBtn);
 
     // Quick save MIDI
@@ -1551,6 +1564,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
 
     syncFromParams();
     updatePianoRoll();
+    applyTooltips();
     resized();  // Ensure all label fonts are applied after full setup
 
     // Poll for host-driven state restores while the editor is open
@@ -1722,6 +1736,71 @@ void PsyMelodyEditor::setupSlider(juce::Slider& slider, juce::Label& label,
     label.setText(text, juce::dontSendNotification);
     // Labels positioned manually in resized()
     addAndMakeVisible(label);
+}
+
+void PsyMelodyEditor::applyTooltips()
+{
+    using S = PsyMelody::Str;
+    auto tip = [this](S key) { return PsyMelody::tr(currentLang, key); };
+
+    // Control strip
+    rootNoteSelector.setTooltip(tip(S::TipRoot));
+    scaleSelector.setTooltip(tip(S::TipScale));
+    bpmSlider.setTooltip(tip(S::TipBpm));
+    phraseLengthSlider.setTooltip(tip(S::TipPhraseLength));
+    octaveSlider.setTooltip(tip(S::TipOctave));
+    patternCategorySelector.setTooltip(tip(S::TipPattern));
+    progressionSelector.setTooltip(tip(S::TipChords));
+
+    // Subgenre pills + style selectors
+    subGoaBtn.setTooltip(tip(S::TipGoa));
+    subFullOnBtn.setTooltip(tip(S::TipFullOn));
+    subDarkBtn.setTooltip(tip(S::TipDarkPsy));
+    subProgBtn.setTooltip(tip(S::TipProgressive));
+    bassStyleSelector.setTooltip(tip(S::TipBassStyle));
+    voicingStyleSelector.setTooltip(tip(S::TipVoicingStyle));
+
+    // Sidebar
+    navMelodyBtn.setTooltip(tip(S::TipNavMelody));
+    navBasslineBtn.setTooltip(tip(S::TipNavBassline));
+    navChordBtn.setTooltip(tip(S::TipNavChord));
+    navManualBtn.setTooltip(tip(S::TipNavSettings));
+    settingsBtn.setTooltip(tip(S::TipNavSettings));
+    undoBtn.setTooltip(tip(S::TipUndo));
+    redoBtn.setTooltip(tip(S::TipRedo));
+
+    // Expression knobs
+    densitySlider.setTooltip(tip(S::TipDensity));
+    acidSlider.setTooltip(tip(S::TipAcid));
+    ornamentSlider.setTooltip(tip(S::TipOrnament));
+    graceSlider.setTooltip(tip(S::TipGrace));
+    rhythmVarSlider.setTooltip(tip(S::TipRhythmVar));
+    pitchRangeSlider.setTooltip(tip(S::TipPitchRange));
+
+    // Header presets
+    presetSelector.setTooltip(tip(S::TipPreset));
+    savePresetBtn.setTooltip(tip(S::TipSavePreset));
+
+    // Footer
+    generateButton.setTooltip(tip(S::TipGenerate));
+    variationButton.setTooltip(tip(S::TipVariation));
+    exportMidiBtn.setTooltip(tip(S::TipExportMidi));
+    importMidiBtn.setTooltip(tip(S::TipImportMidi));
+    copyMidiBtn.setTooltip(tip(S::TipQuickSave));
+    quickSaveDirBtn.setTooltip(tip(S::TipQuickSaveDir));
+    previewToggle.setTooltip(tip(S::TipPreviewToggle));
+    previewWaveSelector.setTooltip(tip(S::TipPreviewWave));
+    previewVolSlider.setTooltip(tip(S::TipPreviewVol));
+
+    // Lane tabs + piano roll zoom overlay
+    laneVelBtn.setTooltip(tip(S::TipLaneVel));
+    lanePanBtn.setTooltip(tip(S::TipLanePan));
+    lanePitchBtn.setTooltip(tip(S::TipLanePitch));
+    pianoRoll.zoomOutXBtn.setTooltip(tip(S::TipZoomOutX));
+    pianoRoll.zoomInXBtn.setTooltip(tip(S::TipZoomInX));
+    pianoRoll.zoomOutYBtn.setTooltip(tip(S::TipZoomOutY));
+    pianoRoll.zoomInYBtn.setTooltip(tip(S::TipZoomInY));
+    pianoRoll.zoomFitBtn.setTooltip(tip(S::TipZoomFit));
 }
 
 void PsyMelodyEditor::syncFromParams()
@@ -2262,9 +2341,11 @@ void PsyMelodyEditor::resized()
     variationButton.setBounds(footer.removeFromLeft(varW).reduced(1, btnY));
     footer.removeFromLeft(6);
 
-    // Group 2: Export/Import MIDI (same width)
+    // Group 2: Export/Import MIDI (export is wider by its drag grip so the
+    // label keeps the same text area as import)
     int midiW = 86;
-    exportMidiBtn.setBounds(footer.removeFromLeft(midiW).reduced(1, btnY));
+    exportMidiBtn.setBounds(
+        footer.removeFromLeft(midiW + DraggableExportButton::gripWidth).reduced(1, btnY));
     importMidiBtn.setBounds(footer.removeFromLeft(midiW).reduced(1, btnY));
     footer.removeFromLeft(6);
 
