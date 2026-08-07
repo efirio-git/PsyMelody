@@ -38,6 +38,7 @@ private:
     LaneType laneType = LaneType::Velocity;
     float zoomX = 1.0f;
     float scrollX = 0.0f;
+    bool undoPushedThisGesture = false;
 
     float totalWidth() const { return (float)getWidth() * zoomX; }
     float beatWidth() const { return totalWidth() / (numBars * 4.0f); }
@@ -68,6 +69,7 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
 
@@ -109,6 +111,7 @@ private:
 
     enum class DragMode { None, MoveNote, ResizeNote, RubberBand };
     DragMode dragMode = DragMode::None;
+    bool undoPushedThisGesture = false;
     int dragNoteIndex = -1;
     int dragOrigNote = 0;
     double dragOrigBeat = 0.0, dragOrigDuration = 0.0;
@@ -135,7 +138,8 @@ private:
 };
 
 class PsyMelodyEditor : public juce::AudioProcessorEditor,
-                        public juce::ScrollBar::Listener {
+                        public juce::ScrollBar::Listener,
+                        private juce::Timer {
 public:
     explicit PsyMelodyEditor(PsyMelodyProcessor&);
     ~PsyMelodyEditor() override;
@@ -145,8 +149,11 @@ public:
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
 
 private:
+    void timerCallback() override;
+
     PsyMelodyProcessor& psyProcessor;
     PsyMelodyLookAndFeel psyLnf;
+    juce::uint32 lastSeenStateVersion = 0;
 
     // Settings page
     PsyMelody::SettingsPage settingsPage;

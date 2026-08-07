@@ -28,12 +28,23 @@ public:
         timeSig.setTimeStamp(0);
         sequence.addEvent(timeSig);
 
-        // Add note events
+        // Add note events (assumed sorted by startBeat)
+        int lastPanCC = -1;
         for (const auto& event : events) {
             double startTick = event.startBeat * ticksPerBeat;
             double endTick = (event.startBeat + event.duration) * ticksPerBeat;
             int vel = std::clamp((int)(event.velocity * 127.0f), 1, 127);
             int channel = 1;
+
+            // Pan as CC10, written only on change so a panned note is
+            // followed by a re-center for later centered notes
+            int panCC = std::clamp((int)std::lround((event.pan + 1.0f) * 0.5f * 127.0f), 0, 127);
+            if (panCC != lastPanCC) {
+                auto panMsg = juce::MidiMessage::controllerEvent(channel, 10, panCC);
+                panMsg.setTimeStamp(startTick);
+                sequence.addEvent(panMsg);
+                lastPanCC = panCC;
+            }
 
             // Pitch bend before note if needed
             if (event.pitchBend != 0) {

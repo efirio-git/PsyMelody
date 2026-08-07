@@ -52,6 +52,13 @@ public:
     bool isCurrentlyPlaying() const { return playing.load(); }
     double getDawBpm() const { return dawBpm.load(); }
 
+    // All BPM writes must go through here so the audio thread's fallback
+    // (used when the host reports no tempo) stays in sync lock-free
+    void setBpm(float b) { genParams.bpm = b; fallbackBpm.store(b); }
+
+    // Bumped by setStateInformation so an already-open editor can resync
+    juce::uint32 getStateVersion() const { return stateVersion.load(); }
+
     // Editing interface
     void updatePhrase(const std::vector<PsyMelody::NoteEvent>& phrase);
     void addNote(const PsyMelody::NoteEvent& note);
@@ -86,6 +93,8 @@ private:
     std::atomic<double> playbackPosition{0.0};
     std::atomic<bool> playing{false};
     std::atomic<double> dawBpm{0.0};  // 0 = no DAW BPM available
+    std::atomic<float> fallbackBpm{145.0f};
+    std::atomic<juce::uint32> stateVersion{0};
 
     // Undo/Redo history
     std::vector<std::vector<PsyMelody::NoteEvent>> undoHistory;

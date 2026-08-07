@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -11,21 +12,29 @@ public:
 
     void prepareToPlay(double sampleRate, int samplesPerBlock);
     void processBlock(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midiMessages);
-    void setEnabled(bool enabled) { isEnabled = enabled; if (!enabled) allNotesOff(); }
-    void allNotesOff() { for (auto& v : voices) { v.active = false; v.envLevel = 0.0f; v.envTarget = 0.0f; v.filterState = 0.0f; } }
-    bool getEnabled() const { return isEnabled; }
-    void setVolume(float vol) { volume = std::clamp(vol, 0.0f, 1.0f); }
+    void setEnabled(bool enabled) { isEnabled.store(enabled); if (!enabled) allNotesOff(); }
+    // Safe from any thread: voices are zeroed by the audio thread at the
+    // start of the next processed block
+    void allNotesOff() { killRequested.store(true); }
+    bool getEnabled() const { return isEnabled.load(); }
+    void setVolume(float vol) { volume.store(std::clamp(vol, 0.0f, 1.0f)); }
 
     // Waveform type
     enum class WaveType { Saw, Square, Sine, Triangle };
-    void setWaveType(WaveType type) { waveType = type; }
-    WaveType getWaveType() const { return waveType; }
+    void setWaveType(WaveType type) { waveType.store(type); }
+    WaveType getWaveType() const { return waveType.load(); }
 
 private:
-    bool isEnabled = false;
-    float volume = 0.15f;
+    std::atomic<bool> isEnabled { false };
+    std::atomic<float> volume { 0.15f };
+    std::atomic<WaveType> waveType { WaveType::Saw };
+    std::atomic<bool> killRequested { false };
     double sampleRate = 44100.0;
-    WaveType waveType = WaveType::Saw;
+
+    static_assert(std::atomic<WaveType>::is_always_lock_free,
+                  "WaveType atomic must be lock-free for the audio thread");
+    static_assert(std::atomic<float>::is_always_lock_free,
+                  "float atomic must be lock-free for the audio thread");
 
     // Simple polyphonic synth (8 voices)
     static constexpr int maxVoices = 8;
@@ -33,6 +42,7 @@ private:
         bool active = false;
         int noteNumber = 0;
         float velocity = 0.0f;
+        float pan = 0.0f;           // from CC10; 0 = use auto spread
         double phase = 0.0;
         double phaseIncrement = 0.0;
         float envLevel = 0.0f;      // simple AR envelope
@@ -42,13 +52,14 @@ private:
     };
     Voice voices[maxVoices];
     uint64_t voiceCounter = 0;
+    float channelPan = 0.0f;        // audio thread only, last received CC10
 
     float filterCutoff = 0.3f;  // normalized 0-1
     float filterResonance = 0.2f;
 
     int findFreeVoice();
     int findVoiceForNote(int noteNumber);
-    float generateSample(Voice& voice);
+    float generateSample(Voice& voice, WaveType wave);
     float midiNoteToFreq(int noteNumber);
     float polyBlep(double t, double dt);
 };

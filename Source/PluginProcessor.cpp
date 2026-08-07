@@ -25,6 +25,7 @@ void PsyMelodyProcessor::releaseResources()
 void PsyMelodyProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                         juce::MidiBuffer& midiMessages)
 {
+    juce::ScopedNoDenormals noDenormals;
     buffer.clear();
     midiMessages.clear();
 
@@ -34,7 +35,7 @@ void PsyMelodyProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     auto posInfo = playHead->getPosition();
     if (!posInfo.hasValue()) return;
 
-    double bpm = genParams.bpm;
+    double bpm = fallbackBpm.load();
     if (auto bpmOpt = posInfo->getBpm()) {
         bpm = *bpmOpt;
         dawBpm.store(bpm);
@@ -121,6 +122,23 @@ void PsyMelodyProcessor::getStateInformation(juce::MemoryBlock& destData)
     state.setProperty("rhythmVariation", genParams.rhythmVariation, nullptr);
     state.setProperty("pitchRange", genParams.pitchRange, nullptr);
 
+    // Persist the edited sequence (same attribute names as user preset XML)
+    juce::ValueTree seq("Sequence");
+    for (const auto& n : currentPhrase) {
+        juce::ValueTree note("Note");
+        note.setProperty("nn", n.noteNumber, nullptr);
+        note.setProperty("vel", n.velocity, nullptr);
+        note.setProperty("pan", n.pan, nullptr);
+        note.setProperty("start", n.startBeat, nullptr);
+        note.setProperty("dur", n.duration, nullptr);
+        note.setProperty("pb", n.pitchBend, nullptr);
+        note.setProperty("acc", n.accent, nullptr);
+        note.setProperty("sld", n.slide, nullptr);
+        note.setProperty("grace", n.isGraceNote, nullptr);
+        seq.appendChild(note, nullptr);
+    }
+    state.appendChild(seq, nullptr);
+
     juce::MemoryOutputStream stream(destData, false);
     state.writeToStream(stream);
 }
@@ -129,20 +147,46 @@ void PsyMelodyProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     auto state = juce::ValueTree::readFromData(data, static_cast<size_t>(sizeInBytes));
     if (state.isValid()) {
-        genParams.rootNote = state.getProperty("rootNote", 0);
-        genParams.scaleIndex = state.getProperty("scaleIndex", 0);
-        genParams.bpm = state.getProperty("bpm", 145.0f);
-        genParams.phraseLengthBars = state.getProperty("phraseLengthBars", 4);
-        genParams.baseOctave = state.getProperty("baseOctave", 4);
-        genParams.patternCategory = state.getProperty("patternCategory", 1);
-        genParams.progression = state.getProperty("progression", 0);
-        genParams.subgenre = state.getProperty("subgenre", 0);
-        genParams.density = state.getProperty("density", 0.6f);
-        genParams.acidAmount = state.getProperty("acidAmount", 0.5f);
-        genParams.ornamentAmount = state.getProperty("ornamentAmount", 0.3f);
-        genParams.graceAmount = state.getProperty("graceAmount", 0.0f);
-        genParams.rhythmVariation = state.getProperty("rhythmVariation", 0.4f);
-        genParams.pitchRange = state.getProperty("pitchRange", 0.5f);
+        // Hosts can feed us arbitrary state data - clamp everything
+        genParams.rootNote = std::clamp((int)state.getProperty("rootNote", 0), 0, 11);
+        genParams.scaleIndex = std::clamp((int)state.getProperty("scaleIndex", 0),
+                                          0, (int)PsyMelody::GOA_SCALES.size() - 1);
+        setBpm(std::clamp((float)state.getProperty("bpm", 145.0f), 60.0f, 200.0f));
+        genParams.phraseLengthBars = std::clamp((int)state.getProperty("phraseLengthBars", 4), 1, 16);
+        genParams.baseOctave = std::clamp((int)state.getProperty("baseOctave", 4), 2, 6);
+        genParams.patternCategory = std::clamp((int)state.getProperty("patternCategory", 1), 0, 3);
+        genParams.progression = std::clamp((int)state.getProperty("progression", 0), 0, 8);
+        genParams.subgenre = std::clamp((int)state.getProperty("subgenre", 0), 0, 3);
+        genParams.density = std::clamp((float)state.getProperty("density", 0.6f), 0.0f, 1.0f);
+        genParams.acidAmount = std::clamp((float)state.getProperty("acidAmount", 0.5f), 0.0f, 1.0f);
+        genParams.ornamentAmount = std::clamp((float)state.getProperty("ornamentAmount", 0.3f), 0.0f, 1.0f);
+        genParams.graceAmount = std::clamp((float)state.getProperty("graceAmount", 0.0f), 0.0f, 1.0f);
+        genParams.rhythmVariation = std::clamp((float)state.getProperty("rhythmVariation", 0.4f), 0.0f, 1.0f);
+        genParams.pitchRange = std::clamp((float)state.getProperty("pitchRange", 0.5f), 0.0f, 1.0f);
+
+        auto seq = state.getChildWithName("Sequence");
+        if (seq.isValid()) {
+            std::vector<PsyMelody::NoteEvent> phrase;
+            phrase.reserve(static_cast<size_t>(seq.getNumChildren()));
+            for (const auto& note : seq) {
+                if (!note.hasType("Note")) continue;
+                PsyMelody::NoteEvent n;
+                n.noteNumber = std::clamp((int)note.getProperty("nn", 60), 0, 127);
+                n.velocity = std::clamp((float)note.getProperty("vel", 0.8f), 0.0f, 1.0f);
+                n.pan = std::clamp((float)note.getProperty("pan", 0.0f), -1.0f, 1.0f);
+                n.startBeat = std::max(0.0, (double)note.getProperty("start", 0.0));
+                n.duration = std::max(0.0625, (double)note.getProperty("dur", 0.25));
+                n.pitchBend = std::clamp((int)note.getProperty("pb", 0), -8192, 8191);
+                n.accent = note.getProperty("acc", false);
+                n.slide = note.getProperty("sld", false);
+                n.isGraceNote = note.getProperty("grace", false);
+                phrase.push_back(n);
+            }
+            currentPhrase = std::move(phrase);
+            patternEngine.loadPhrase(currentPhrase);
+        }
+
+        stateVersion.fetch_add(1);
     }
 }
 
