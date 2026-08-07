@@ -25,11 +25,12 @@ enum class PatternCategory {
     LeadMelody,      // Mid-density melodic hooks
     SlowMelody,      // Sparse, deliberate melodies
     Ambient,         // Very sparse, atmospheric
+    Euclidean,       // Mathematically even pulse (works with every subgenre)
     NumCategories
 };
 
 inline const std::vector<std::string> PATTERN_CATEGORY_NAMES = {
-    "Acid Arp", "Lead Melody", "Slow Melody", "Ambient"
+    "Acid Arp", "Lead Melody", "Slow Melody", "Ambient", "Euclidean"
 };
 
 // Parameters controlling the generation
@@ -48,6 +49,11 @@ struct GeneratorParams {
     float graceAmount = 0.0f;      // 0.0 - 1.0 (grace notes) default OFF
     float rhythmVariation = 0.4f;  // 0.0 straight - 1.0 syncopated
     float pitchRange = 0.5f;       // 0.0 narrow - 1.0 wide interval range
+    // New fields must be appended here with defaults: Presets.h initializes
+    // this struct positionally, so inserting in the middle silently shifts
+    // every factory preset
+    float humanize = 0.0f;         // 0.0 - 1.0 timing/velocity jitter
+    float swing = 0.0f;            // 0.0 straight - 1.0 triplet shuffle
 };
 
 inline const std::vector<std::string> SUBGENRE_NAMES = {
@@ -91,6 +97,15 @@ public:
                                               const GeneratorParams& params,
                                               float variationAmount = 0.3f);
 
+    // Partial regeneration: keep one dimension of the phrase, re-roll the other
+    std::vector<NoteEvent> regeneratePitchesOnly(const std::vector<NoteEvent>& original,
+                                                 const GeneratorParams& params);
+    std::vector<NoteEvent> regenerateRhythmOnly(const std::vector<NoteEvent>& original,
+                                                const GeneratorParams& params);
+
+    // Humanize/swing post-processing; shared by all generation modes
+    void applyGroove(std::vector<NoteEvent>& events, float humanize, float swing);
+
     void setSeed(unsigned int seed);
 
 private:
@@ -125,6 +140,10 @@ private:
     void applyStrongBeatEmphasis(std::vector<NoteEvent>& events,
                                   const GeneratorParams& params);
 
+    // Re-derive grace note pitches from their (possibly re-rolled) parent notes
+    void rederiveGracePitches(std::vector<NoteEvent>& events,
+                              const GeneratorParams& params);
+
     // Chord progression
     std::vector<ChordInfo> getProgression(int progressionIndex, int numBars) const;
     ChordInfo getChordAtBar(const std::vector<ChordInfo>& progression, int bar) const;
@@ -136,6 +155,9 @@ private:
 
     // Goa-specific rhythm patterns (16th note grid, 1 = hit, 0 = rest)
     static const std::vector<std::vector<int>>& getGoaRhythmPatterns();
+
+    // Bjorklund/Euclidean pattern: distributes `hits` evenly over `steps`
+    static std::vector<int> euclideanPattern(int hits, int steps, int rotation);
 
     // Interval transition weights for Goa melodies
     static const std::vector<std::pair<int, float>>& getIntervalWeights();

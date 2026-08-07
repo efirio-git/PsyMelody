@@ -34,6 +34,8 @@ class ChordVoicingGenerator {
 public:
     ChordVoicingGenerator() : rng(std::random_device{}()) {}
 
+    void setSeed(unsigned int seed) { rng.seed(seed); }
+
     std::vector<NoteEvent> generateVoicing(const ChordVoicingParams& params)
     {
         std::vector<NoteEvent> events;

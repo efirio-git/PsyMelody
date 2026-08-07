@@ -1,6 +1,7 @@
 #include "GoaMelodyGenerator.h"
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <numeric>
 
 namespace PsyMelody {
@@ -247,9 +248,22 @@ std::vector<double> GoaMelodyGenerator::generateRhythm(const GeneratorParams& pa
 
     struct CategoryRange { int start; int end; };
 
-    int rangeStart, rangeEnd;
+    // Euclidean mode: works with every subgenre, so it is checked before the
+    // subgenre pattern ranges. One pattern per call (per motif) - bar-to-bar
+    // variation still comes from the dropout/ghost logic below.
+    const bool useEuclid =
+        (params.patternCategory == (int)PatternCategory::Euclidean);
+    std::vector<int> euclid;
+    if (useEuclid) {
+        int hits = std::clamp((int)std::lround(params.density * 15.0f) + 1, 1, 16);
+        euclid = euclideanPattern(hits, 16, randomInt(0, 15));
+    }
 
-    if (params.subgenre == 1) {
+    int rangeStart = 0, rangeEnd = 0;
+
+    if (useEuclid) {
+        // pattern ranges unused
+    } else if (params.subgenre == 1) {
         // Full-On: use patterns 32-39
         rangeStart = 32;
         rangeEnd = 39;
@@ -273,14 +287,16 @@ std::vector<double> GoaMelodyGenerator::generateRhythm(const GeneratorParams& pa
     int rangeSize = rangeEnd - rangeStart + 1;
 
     for (int bar = 0; bar < params.phraseLengthBars; ++bar) {
-        int offset = (int)(params.density * (float)(rangeSize - 1));
-        int jitter = randomInt(-2, 2);
-        int patternIdx = std::clamp(rangeStart + offset + jitter, rangeStart, rangeEnd);
-
-        const auto& pattern = patterns[static_cast<size_t>(patternIdx)];
+        const std::vector<int>* pattern = &euclid;
+        if (!useEuclid) {
+            int offset = (int)(params.density * (float)(rangeSize - 1));
+            int jitter = randomInt(-2, 2);
+            int patternIdx = std::clamp(rangeStart + offset + jitter, rangeStart, rangeEnd);
+            pattern = &patterns[static_cast<size_t>(patternIdx)];
+        }
 
         for (int step = 0; step < 16; ++step) {
-            if (pattern[static_cast<size_t>(step)] == 1) {
+            if ((*pattern)[static_cast<size_t>(step)] == 1) {
                 if (randomFloat() > params.rhythmVariation * 0.3f) {
                     double beatPos = bar * 4.0 + step * 0.25;
                     onsets.push_back(beatPos);
@@ -967,6 +983,190 @@ int GoaMelodyGenerator::randomInt(int min, int max)
 {
     std::uniform_int_distribution<int> dist(min, max);
     return dist(rng);
+}
+
+// ============================================================
+// Euclidean (Bjorklund) pattern: k hits spread evenly over n steps
+// ============================================================
+std::vector<int> GoaMelodyGenerator::euclideanPattern(int hits, int steps, int rotation)
+{
+    std::vector<int> pattern(static_cast<size_t>(steps), 0);
+    int bucket = 0;
+    for (int i = 0; i < steps; ++i) {
+        bucket += hits;
+        if (bucket >= steps) {
+            bucket -= steps;
+            pattern[static_cast<size_t>((i + rotation) % steps)] = 1;
+        }
+    }
+    return pattern;
+}
+
+// ============================================================
+// Humanize / swing groove, shared by all generation modes
+// ============================================================
+void GoaMelodyGenerator::applyGroove(std::vector<NoteEvent>& events,
+                                      float humanize, float swing)
+{
+    if (events.empty() || (humanize <= 0.0f && swing <= 0.0f))
+        return;
+
+    humanize = std::clamp(humanize, 0.0f, 1.0f);
+    swing = std::clamp(swing, 0.0f, 1.0f);
+
+    // One offset per 16th slot: keeps chords together, grace notes attached
+    // to their parents, and the odd/even swing decision on the clean grid
+    std::map<long long, double> slotOffsets;
+    auto offsetForSlot = [&](long long slot) {
+        auto it = slotOffsets.find(slot);
+        if (it != slotOffsets.end())
+            return it->second;
+        double off = 0.0;
+        if ((slot % 2) != 0)
+            off += swing * (1.0 / 12.0); // full swing = triplet position
+        if (humanize > 0.0f)
+            off += (double)randomFloat(-1.0f, 1.0f) * humanize * 0.03;
+        slotOffsets[slot] = off;
+        return off;
+    };
+
+    for (auto& e : events) {
+        long long slot = (long long)std::llround(e.startBeat / 0.25);
+        e.startBeat = std::max(0.0, e.startBeat + offsetForSlot(slot));
+        if (humanize > 0.0f && !e.isGraceNote)
+            e.velocity = std::clamp(
+                e.velocity * (1.0f + randomFloat(-1.0f, 1.0f) * humanize * 0.15f),
+                0.05f, 1.0f);
+    }
+
+    // Max relative displacement between adjacent slots is < 0.25 beats, so no
+    // reordering is actually possible - sorted as a guarantee for consumers
+    std::sort(events.begin(), events.end(),
+              [](const NoteEvent& a, const NoteEvent& b) {
+                  return a.startBeat < b.startBeat;
+              });
+
+    // Slide durations were computed against pre-groove neighbour positions
+    // (applyAcidArticulation / applyBassAcid); recompute so legato survives.
+    // Grace notes carry slide=true but must keep their short fixed length.
+    for (size_t i = 0; i < events.size(); ++i) {
+        if (!events[i].slide || events[i].isGraceNote)
+            continue;
+        for (size_t j = i + 1; j < events.size(); ++j) {
+            if (events[j].isGraceNote)
+                continue;
+            if (events[j].startBeat > events[i].startBeat + 1.0e-6) {
+                events[i].duration = events[j].startBeat - events[i].startBeat + 0.05;
+                break;
+            }
+        }
+    }
+}
+
+// ============================================================
+// Partial regeneration
+// ============================================================
+void GoaMelodyGenerator::rederiveGracePitches(std::vector<NoteEvent>& events,
+                                               const GeneratorParams& params)
+{
+    const auto& scale = GOA_SCALES[static_cast<size_t>(params.scaleIndex)];
+    for (size_t i = 0; i < events.size(); ++i) {
+        if (!events[i].isGraceNote)
+            continue;
+        // Parent = first main note at or after the grace; fall back to the
+        // last main note before it
+        const NoteEvent* parent = nullptr;
+        for (size_t j = 0; j < events.size(); ++j) {
+            if (events[j].isGraceNote)
+                continue;
+            if (events[j].startBeat >= events[i].startBeat - 1.0e-6) {
+                parent = &events[j];
+                break;
+            }
+            parent = &events[j];
+        }
+        if (parent == nullptr)
+            continue;
+        int direction = randomFloat() < 0.5f ? 1 : -1;
+        events[i].noteNumber = quantizeToScale(
+            parent->noteNumber + direction * randomInt(1, 3),
+            params.rootNote, scale);
+    }
+}
+
+std::vector<NoteEvent> GoaMelodyGenerator::regeneratePitchesOnly(
+    const std::vector<NoteEvent>& original, const GeneratorParams& params)
+{
+    auto events = original;
+    std::sort(events.begin(), events.end(),
+              [](const NoteEvent& a, const NoteEvent& b) {
+                  return a.startBeat < b.startBeat;
+              });
+
+    const auto& scale = GOA_SCALES[static_cast<size_t>(params.scaleIndex)];
+    auto scaleNotes = getScaleNotes(params.rootNote, scale,
+                                     params.baseOctave - 1, params.baseOctave + 1);
+    auto progression = getProgression(params.progression, params.phraseLengthBars);
+
+    // Same start-note policy as generateMotif
+    auto chord0 = getChordAtBar(progression, 0);
+    int currentNote = params.rootNote + params.baseOctave * 12 + chord0.rootInterval;
+    if (!chord0.tones.empty() && randomFloat() < 0.5f)
+        currentNote += chord0.tones[static_cast<size_t>(
+            randomInt(0, (int)chord0.tones.size() - 1))];
+    currentNote = quantizeToScale(currentNote, params.rootNote, scale);
+
+    // Walk the existing onsets, re-rolling only the pitch. The chord context
+    // follows the actual bar of each event.
+    for (auto& e : events) {
+        if (e.isGraceNote)
+            continue;
+        auto chord = getChordAtBar(progression, std::max(0, (int)(e.startBeat / 4.0)));
+        e.noteNumber = currentNote;
+        currentNote = chooseNextNote(currentNote, params, scaleNotes, chord);
+    }
+
+    rederiveGracePitches(events, params);
+    // Pitch-only mutations: restore call/response structure and the ending
+    // (applyStrongBeatEmphasis is skipped - it would alter velocities)
+    applyCallAndResponse(events, params);
+    applyPhraseResolution(events, params, params.phraseLengthBars);
+    return events;
+}
+
+std::vector<NoteEvent> GoaMelodyGenerator::regenerateRhythmOnly(
+    const std::vector<NoteEvent>& original, const GeneratorParams& params)
+{
+    // Old melody as a (time, pitch) step function
+    std::vector<std::pair<double, int>> oldPitches;
+    for (const auto& e : original)
+        if (!e.isGraceNote)
+            oldPitches.push_back({ e.startBeat, e.noteNumber });
+    std::sort(oldPitches.begin(), oldPitches.end());
+
+    auto fresh = generatePhrase(params);
+    if (oldPitches.empty())
+        return fresh;
+
+    // Time-based lookup keeps "which pitch sounds when"; denser new rhythms
+    // re-strike the held pitch. Trill-length notes keep their own pitches so
+    // ornaments stay ornamental.
+    for (auto& e : fresh) {
+        if (e.isGraceNote || e.duration < 0.1)
+            continue;
+        int pitch = oldPitches.front().second;
+        for (const auto& [start, p] : oldPitches) {
+            if (start <= e.startBeat + 1.0e-6)
+                pitch = p;
+            else
+                break;
+        }
+        e.noteNumber = pitch;
+    }
+
+    rederiveGracePitches(fresh, params);
+    // No applyPhraseResolution: the mapped ending comes from the old phrase
+    return fresh;
 }
 
 } // namespace PsyMelody
