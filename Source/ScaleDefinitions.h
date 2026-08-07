@@ -1,4 +1,6 @@
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <vector>
 #include <string>
 #include <map>
@@ -56,16 +58,20 @@ inline int quantizeToScale(int midiNote, int rootNote, const ScaleType& scale)
     int octave = (midiNote - rootNote) / 12;
     if (midiNote < rootNote) octave--;
 
-    int bestInterval = 0;
-    int bestDist = 12;
+    int bestOffset = 0;
+    int bestDist = 24;
     for (int interval : scale.intervals) {
-        int dist = std::abs(noteInOctave - interval);
-        if (dist < bestDist) {
-            bestDist = dist;
-            bestInterval = interval;
+        // Also consider the neighbouring octaves so the distance wraps:
+        // e.g. noteInOctave 11 is 1 semitone from interval 0 (up), not 11 (down)
+        for (int candidate : {interval - 12, interval, interval + 12}) {
+            int dist = std::abs(noteInOctave - candidate);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestOffset = candidate;
+            }
         }
     }
-    return rootNote + (octave * 12) + bestInterval;
+    return std::clamp(rootNote + (octave * 12) + bestOffset, 0, 127);
 }
 
 } // namespace PsyMelody

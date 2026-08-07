@@ -16,6 +16,8 @@ void PreviewSynth::prepareToPlay(double sr, int /*samplesPerBlock*/)
         v = Voice{};
     }
     voiceCounter = 0;
+    channelPan = 0.0f;
+    killRequested.store(false);
 }
 
 void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
@@ -23,6 +25,20 @@ void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
 {
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
+
+    // Deferred allNotesOff so message-thread callers never touch the voices
+    if (killRequested.exchange(false)) {
+        for (auto& v : voices) {
+            v.active = false;
+            v.envLevel = 0.0f;
+            v.envTarget = 0.0f;
+            v.filterState = 0.0f;
+        }
+    }
+
+    // Snapshot atomics once per block; the per-sample path stays load-free
+    const float vol = volume.load();
+    const WaveType wave = waveType.load();
 
     // Envelope time constants
     const float attackCoeff  = 1.0f - std::exp(-1.0f / (float)(sampleRate * 0.003));  // ~3ms attack
@@ -55,6 +71,7 @@ void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
                 v.active = true;
                 v.noteNumber = msg.getNoteNumber();
                 v.velocity = msg.getFloatVelocity();
+                v.pan = channelPan;
                 v.phase = 0.0;
                 v.phaseIncrement = (double)midiNoteToFreq(msg.getNoteNumber()) / sampleRate;
                 v.envTarget = 1.0f;
@@ -67,6 +84,10 @@ void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
                     voices[vi].envTarget = 0.0f;
                     voices[vi].active = false;  // mark inactive immediately
                 }
+            }
+            else if (msg.isController() && msg.getControllerNumber() == 10) {
+                channelPan = std::clamp(((float)msg.getControllerValue() - 64.0f) / 63.5f,
+                                        -1.0f, 1.0f);
             }
             else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
                 for (auto& v : voices) {
@@ -98,7 +119,7 @@ void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
             }
 
             // Generate raw oscillator sample
-            float raw = generateSample(v);
+            float raw = generateSample(v, wave);
 
             // Advance phase
             v.phase += v.phaseIncrement;
@@ -116,8 +137,9 @@ void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
             // Apply envelope and velocity
             float out = filtered * v.envLevel * v.velocity;
 
-            // Simple stereo spread based on note number
-            float pan = std::clamp((float)(v.noteNumber - 60) / 24.0f, -1.0f, 1.0f) * 0.3f;
+            // CC10 pan wins when present, otherwise auto spread by note number
+            float autoSpread = std::clamp((float)(v.noteNumber - 60) / 24.0f, -1.0f, 1.0f) * 0.3f;
+            float pan = (v.pan != 0.0f) ? v.pan * 0.7f : autoSpread;
             float gainL = std::cos((pan + 1.0f) * 0.25f * juce::MathConstants<float>::pi);
             float gainR = std::sin((pan + 1.0f) * 0.25f * juce::MathConstants<float>::pi);
 
@@ -126,8 +148,8 @@ void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
         }
 
         // Apply master volume
-        mixL *= volume;
-        mixR *= volume;
+        mixL *= vol;
+        mixR *= vol;
 
         // Write to buffer
         if (numChannels >= 1) buffer.addSample(0, sample, mixL);
@@ -135,12 +157,12 @@ void PreviewSynth::processBlock(juce::AudioBuffer<float>& buffer,
     }
 }
 
-float PreviewSynth::generateSample(Voice& voice)
+float PreviewSynth::generateSample(Voice& voice, WaveType wave)
 {
     double p = voice.phase;
     double dt = voice.phaseIncrement;
 
-    switch (waveType) {
+    switch (wave) {
         case WaveType::Saw: {
             // Naive saw: 2*p - 1, then apply PolyBLEP at discontinuity
             float saw = (float)(2.0 * p - 1.0);

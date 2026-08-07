@@ -2,26 +2,40 @@
 
 namespace PsyMelody {
 
-MidiPatternEngine::MidiPatternEngine() {}
+MidiPatternEngine::MidiPatternEngine()
+{
+    activeNotes.reserve(128); // avoid heap allocation on the audio thread
+}
 
 void MidiPatternEngine::loadPhrase(const std::vector<NoteEvent>& phrase)
 {
-    currentPhrase = phrase;
+    // Build the copy and compute the length outside the lock so the
+    // critical section is only a pointer swap.
+    std::vector<NoteEvent> local(phrase);
+    double len = phraseLengthBeats.load();
     if (!phrase.empty()) {
         // Calculate phrase length from the last event
         double maxEnd = 0.0;
         for (const auto& e : phrase)
             maxEnd = std::max(maxEnd, e.startBeat + e.duration);
         // Round up to nearest bar (4 beats)
-        phraseLengthBeats = std::ceil(maxEnd / 4.0) * 4.0;
+        len = std::ceil(maxEnd / 4.0) * 4.0;
     }
-    reset();
+
+    juce::SpinLock::ScopedLockType sl(phraseLock);
+    currentPhrase.swap(local);
+    phraseLengthBeats.store(len);
+    // Sounding notes get their note-offs on the next audio block instead of
+    // being dropped here, so the DAW never receives an orphaned note-on.
+    flushActiveNotes = true;
 }
 
 void MidiPatternEngine::reset()
 {
+    juce::SpinLock::ScopedLockType sl(phraseLock);
     activeNotes.clear();
-    lastPpqPosition = -1.0;
+    flushActiveNotes = false;
+    lastPanCC = -1;
 }
 
 void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
@@ -31,23 +45,37 @@ void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
                                        double sampleRate,
                                        bool isPlaying)
 {
+    juce::SpinLock::ScopedTryLockType tl(phraseLock);
+    if (!tl.isLocked())
+        return; // phrase is being swapped; skip this block
+
+    // Must run before this block's note-on scan so a reloaded phrase can
+    // retrigger the same pitches without the flush killing them.
+    if (flushActiveNotes) {
+        for (const auto& active : activeNotes)
+            sendNoteOff(midiBuffer, active, 0);
+        activeNotes.clear();
+        flushActiveNotes = false;
+        lastPanCC = -1;
+    }
+
     if (!isPlaying || currentPhrase.empty()) {
         // Send note-offs for any active notes
         for (const auto& active : activeNotes)
-            sendNoteOff(midiBuffer, active.noteNumber, active.channel, 0);
+            sendNoteOff(midiBuffer, active, 0);
         activeNotes.clear();
-        lastPpqPosition = ppqPosition;
         return;
     }
 
+    const double phraseLen = phraseLengthBeats.load();
     double beatsPerSample = bpm / (60.0 * sampleRate);
     double blockStartBeat = ppqPosition;
     double blockEndBeat = ppqPosition + numSamples * beatsPerSample;
 
     // Loop position within phrase
-    auto loopPos = [this](double beat) -> double {
-        double pos = std::fmod(beat, phraseLengthBeats);
-        if (pos < 0.0) pos += phraseLengthBeats;
+    auto loopPos = [phraseLen](double beat) -> double {
+        double pos = std::fmod(beat, phraseLen);
+        if (pos < 0.0) pos += phraseLen;
         return pos;
     };
 
@@ -69,10 +97,10 @@ void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
 
         if (shouldEnd) {
             double beatDelta = noteEndInPhrase - currentPos;
-            if (beatDelta < 0) beatDelta += phraseLengthBeats;
+            if (beatDelta < 0) beatDelta += phraseLen;
             int sampleOffset = std::max(0, std::min(numSamples - 1,
                 (int)(beatDelta / beatsPerSample)));
-            sendNoteOff(midiBuffer, it->noteNumber, it->channel, sampleOffset);
+            sendNoteOff(midiBuffer, *it, sampleOffset);
             it = activeNotes.erase(it);
         } else {
             ++it;
@@ -95,9 +123,19 @@ void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
 
         if (shouldTrigger) {
             double beatDelta = event.startBeat - currentPos;
-            if (beatDelta < 0) beatDelta += phraseLengthBeats;
+            if (beatDelta < 0) beatDelta += phraseLen;
             int sampleOffset = std::max(0, std::min(numSamples - 1,
                 (int)(beatDelta / beatsPerSample)));
+
+            // Pan as CC10, emitted only on change so a panned note is
+            // followed by a re-center for later centered notes
+            int panCC = juce::jlimit(0, 127,
+                (int)std::lround((event.pan + 1.0f) * 0.5f * 127.0f));
+            if (panCC != lastPanCC) {
+                midiBuffer.addEvent(juce::MidiMessage::controllerEvent(1, 10, panCC),
+                                    sampleOffset);
+                lastPanCC = panCC;
+            }
 
             // Send pitch bend if needed
             if (event.pitchBend != 0)
@@ -108,12 +146,15 @@ void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
             ActiveNote active;
             active.noteNumber = event.noteNumber;
             active.channel = 1;
-            active.endBeat = std::fmod(event.startBeat + event.duration, phraseLengthBeats);
+            active.hadPitchBend = (event.pitchBend != 0);
+            active.endBeat = std::fmod(event.startBeat + event.duration, phraseLen);
+            // A note ending exactly at the phrase end wraps to 0 and would
+            // collide with the next loop's beat-0 note-ons; end it just before
+            if (active.endBeat <= 0.0 || active.endBeat >= phraseLen)
+                active.endBeat = phraseLen - 1.0e-4;
             activeNotes.push_back(active);
         }
     }
-
-    lastPpqPosition = ppqPosition;
 }
 
 void MidiPatternEngine::sendNoteOn(juce::MidiBuffer& buffer, int note,
@@ -124,11 +165,14 @@ void MidiPatternEngine::sendNoteOn(juce::MidiBuffer& buffer, int note,
     buffer.addEvent(msg, sampleOffset);
 }
 
-void MidiPatternEngine::sendNoteOff(juce::MidiBuffer& buffer, int note,
-                                      int channel, int sampleOffset)
+void MidiPatternEngine::sendNoteOff(juce::MidiBuffer& buffer,
+                                      const ActiveNote& note, int sampleOffset)
 {
-    auto msg = juce::MidiMessage::noteOff(channel, note);
-    buffer.addEvent(msg, sampleOffset);
+    buffer.addEvent(juce::MidiMessage::noteOff(note.channel, note.noteNumber),
+                    sampleOffset);
+    // Re-center the pitch wheel so the bend doesn't detune later notes
+    if (note.hadPitchBend)
+        sendPitchBend(buffer, 8192, note.channel, sampleOffset);
 }
 
 void MidiPatternEngine::sendPitchBend(juce::MidiBuffer& buffer, int bendValue,

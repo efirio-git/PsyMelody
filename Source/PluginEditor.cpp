@@ -117,7 +117,7 @@ void ParamLaneView::paint(juce::Graphics& g)
 
 void ParamLaneView::mouseDown(const juce::MouseEvent& e)
 {
-    if (processor) processor->pushUndoState();
+    undoPushedThisGesture = false;
     mouseDrag(e);
 }
 
@@ -126,6 +126,12 @@ void ParamLaneView::mouseDrag(const juce::MouseEvent& e)
     if (!processor || !noteEvents) return;
     int idx = findNoteNear((float)e.x);
     if (idx < 0) return;
+
+    // Push undo only once per gesture, and only when a note is actually edited
+    if (!undoPushedThisGesture) {
+        processor->pushUndoState();
+        undoPushedThisGesture = true;
+    }
 
     auto phrase = processor->getCurrentPhrase();
     float h = (float)getHeight();
@@ -319,13 +325,15 @@ void PianoRollView::mouseDown(const juce::MouseEvent& e)
 {
     if (!processor) return;
     grabKeyboardFocus();
-    // Save undo state once at the start of any editing action
-    processor->pushUndoState();
+    // Undo state is pushed lazily, right before the first actual modification,
+    // so selection clicks don't burn undo history
+    undoPushedThisGesture = false;
     dragStartPos = e.getPosition();
     int idx = findNoteAt((float)e.x, (float)e.y);
 
     if (e.mods.isRightButtonDown()) {
         if (idx >= 0) {
+            processor->pushUndoState();
             // If right-clicking a selected note, remove all selected from highest index first
             if (selectedNotes.count(idx)) {
                 std::vector<int> sorted(selectedNotes.begin(), selectedNotes.end());
@@ -418,6 +426,15 @@ void PianoRollView::mouseDrag(const juce::MouseEvent& e)
     }
 
     if (dragNoteIndex < 0) return;
+
+    // First real modification of this drag gesture: snapshot for undo now,
+    // while the phrase is still pristine
+    if ((dragMode == DragMode::MoveNote || dragMode == DragMode::ResizeNote)
+        && !undoPushedThisGesture) {
+        processor->pushUndoState();
+        undoPushedThisGesture = true;
+    }
+
     if (dragMode == DragMode::MoveNote) {
         int noteDelta = noteAtY((float)e.y) - noteAtY((float)dragStartPos.y);
         double beatDelta = beatAtX((float)e.x) - beatAtX((float)dragStartPos.x);
@@ -481,6 +498,43 @@ void PianoRollView::mouseUp(const juce::MouseEvent&)
     if (dragMode != DragMode::None && dragMode != DragMode::RubberBand && onNotesChanged)
         onNotesChanged();
     dragNoteIndex = -1; dragMode = DragMode::None; repaint();
+}
+
+void PianoRollView::mouseDoubleClick(const juce::MouseEvent& e)
+{
+    if (!processor || e.mods.isRightButtonDown()) return;
+    if (findNoteAt((float)e.x, (float)e.y) >= 0) return;
+
+    processor->pushUndoState();
+
+    PsyMelody::NoteEvent n;
+    n.noteNumber = std::clamp(noteAtY((float)e.y), 0, 127);
+    n.velocity = 0.8f;
+    n.pan = 0.0f;
+    // floor keeps the note in the clicked 16th cell (round would jump right)
+    n.startBeat = std::clamp(std::floor(beatAtX((float)e.x) * 4.0) / 4.0,
+                             0.0, (double)numBars * 4.0 - 0.25);
+    n.duration = 0.25;
+    n.pitchBend = 0;
+    n.accent = false;
+    n.slide = false;
+    n.isGraceNote = false;
+
+    processor->addNote(n);
+    noteEvents = processor->getCurrentPhrase();
+
+    selectedNotes.clear();
+    for (int i = 0; i < (int)noteEvents.size(); ++i) {
+        if (noteEvents[static_cast<size_t>(i)].noteNumber == n.noteNumber &&
+            std::abs(noteEvents[static_cast<size_t>(i)].startBeat - n.startBeat) < 0.01) {
+            selectedNotes.insert(i);
+            break;
+        }
+    }
+
+    recalcNoteRange();
+    repaint();
+    if (onNotesChanged) onNotesChanged();
 }
 
 void PianoRollView::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
@@ -602,7 +656,7 @@ void PianoRollView::paint(juce::Graphics& g)
     float lm = pianoLabelMargin + 8.0f;
     dl(lm,noteColour,"Note"); dl(lm+50,accentColour,"Accent"); dl(lm+110,slideColour,"Slide"); dl(lm+160,graceColour,"Grace");
     g.setColour(juce::Colour(0xff76747b));
-    g.drawText("Click:add | Drag:move | Edge:resize | RClick:del | Ctrl+Wh:zoom",
+    g.drawText("DblClick:add | Drag:move | Edge:resize | RClick:del | Ctrl+Wh:zoom",
                (int)(lm+216),(int)ly-1,(int)(bounds.getWidth()-lm-220),12,juce::Justification::centredLeft);
 
     // Rubber band selection rectangle
@@ -921,6 +975,9 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 userPreset.category = "User";
                 userPreset.params.rootNote = xml->getIntAttribute("rootNote", 0);
                 userPreset.params.scaleIndex = xml->getIntAttribute("scaleIndex", 0);
+                userPreset.params.bpm = (float)xml->getDoubleAttribute("bpm", 145.0);
+                userPreset.params.subgenre = xml->getIntAttribute("subgenre", 0);
+                userPreset.params.graceAmount = (float)xml->getDoubleAttribute("graceAmount", 0.0);
                 userPreset.params.phraseLengthBars = xml->getIntAttribute("phraseLengthBars", 4);
                 userPreset.params.baseOctave = xml->getIntAttribute("baseOctave", 4);
                 userPreset.params.patternCategory = xml->getIntAttribute("patternCategory", 1);
@@ -990,7 +1047,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     };
     pianoRoll.onDawBpmChanged = [this](double dBpm) {
         bpmSlider.setValue(dBpm, juce::dontSendNotification);
-        psyProcessor.getGeneratorParams().bpm = (float)dBpm;
+        psyProcessor.setBpm((float)dBpm);
     };
     addAndMakeVisible(pianoRoll);
 
@@ -1208,7 +1265,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     bpmSlider.textFromValueFunction = [](double v) { return juce::String((int)v) + " bpm"; };
     bpmSlider.setMouseDragSensitivity(200);
     bpmSlider.onValueChange = [this] {
-        psyProcessor.getGeneratorParams().bpm = bpmSlider.getValue();
+        psyProcessor.setBpm((float)bpmSlider.getValue());
     };
     bpmLabel.setText("BPM", juce::dontSendNotification);
     addAndMakeVisible(bpmSlider);
@@ -1219,7 +1276,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     phraseLengthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     phraseLengthSlider.setColour(juce::Slider::trackColourId, juce::Colour(0xff000000));
     phraseLengthSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff81ecff));
-    phraseLengthSlider.textFromValueFunction = [](double v) { return juce::String((int)v) + " steps"; };
+    phraseLengthSlider.textFromValueFunction = [](double v) { return juce::String((int)v) + " bars"; };
     phraseLengthSlider.setMouseDragSensitivity(150);
     setupSlider(densitySlider, densityLabel, "Density", 0, 1, 0.6);
     setupSlider(acidSlider, acidLabel, "Acid", 0, 1, 0.5);
@@ -1495,13 +1552,29 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     syncFromParams();
     updatePianoRoll();
     resized();  // Ensure all label fonts are applied after full setup
+
+    // Poll for host-driven state restores while the editor is open
+    lastSeenStateVersion = psyProcessor.getStateVersion();
+    startTimerHz(10);
 }
 
 PsyMelodyEditor::~PsyMelodyEditor()
 {
+    stopTimer();
     setLookAndFeel(nullptr);
     hScrollBar.removeListener(this);
     vScrollBar.removeListener(this);
+}
+
+void PsyMelodyEditor::timerCallback()
+{
+    auto version = psyProcessor.getStateVersion();
+    if (version != lastSeenStateVersion) {
+        lastSeenStateVersion = version;
+        syncFromParams();
+        updatePianoRoll();
+        repaint();
+    }
 }
 
 void PsyMelodyEditor::rebuildPresetList()
@@ -1526,6 +1599,7 @@ void PsyMelodyEditor::loadPreset(int index)
     const auto& preset = presets[static_cast<size_t>(index)];
     auto& p = psyProcessor.getGeneratorParams();
     p = preset.params;
+    psyProcessor.setBpm(p.bpm);
     pianoRoll.clearSelection();
 
     // Reset to Melody mode for factory presets
@@ -1549,7 +1623,7 @@ void PsyMelodyEditor::loadPreset(int index)
         if (auto pos = ph->getPosition()) {
             if (auto b = pos->getBpm()) {
                 bpmSlider.setValue(*b, juce::dontSendNotification);
-                psyProcessor.getGeneratorParams().bpm = (float)*b;
+                psyProcessor.setBpm((float)*b);
             }
         }
     }
@@ -1596,6 +1670,9 @@ void PsyMelodyEditor::saveUserPreset()
                     state.setProperty("name", juce::String(name), nullptr);
                     state.setProperty("rootNote", p.rootNote, nullptr);
                     state.setProperty("scaleIndex", p.scaleIndex, nullptr);
+                    state.setProperty("bpm", p.bpm, nullptr);
+                    state.setProperty("subgenre", p.subgenre, nullptr);
+                    state.setProperty("graceAmount", p.graceAmount, nullptr);
                     state.setProperty("phraseLengthBars", p.phraseLengthBars, nullptr);
                     state.setProperty("baseOctave", p.baseOctave, nullptr);
                     state.setProperty("patternCategory", p.patternCategory, nullptr);
@@ -1675,7 +1752,7 @@ void PsyMelodyEditor::syncToParams()
     p.patternCategory = patternCategorySelector.getSelectedId() - 1;
     p.progression = progressionSelector.getSelectedId() - 1;
     p.subgenre = subgenreSelector.getSelectedId() - 1;
-    p.bpm = bpmSlider.getValue();
+    psyProcessor.setBpm((float)bpmSlider.getValue());
     p.phraseLengthBars = (int)phraseLengthSlider.getValue();
     p.density = (float)densitySlider.getValue();
     p.acidAmount = (float)acidSlider.getValue();
@@ -1734,7 +1811,7 @@ void PsyMelodyEditor::paint(juce::Graphics& g)
     g.fillRect(155, 8, 42, 14);
     g.setColour(psyLnf.primary.withAlpha(0.6f));
     g.setFont(psyLnf.uiFontBold.withHeight(11.0f));
-    g.drawText("v0.1.0", 155, 8, 42, 14, juce::Justification::centred);
+    g.drawText("v" JucePlugin_VersionString, 155, 8, 42, 14, juce::Justification::centred);
     // Subtitle
     g.setColour(psyLnf.onSurfaceVariant);
     g.setFont(psyLnf.uiFontRegular.withHeight(12.0f));
