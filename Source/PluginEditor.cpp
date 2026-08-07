@@ -909,6 +909,8 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         toggle(phraseLengthSlider); toggle(densitySlider);
         toggle(acidSlider); toggle(ornamentSlider); toggle(graceSlider);
         toggle(rhythmVarSlider); toggle(pitchRangeSlider); toggle(octaveSlider);
+        toggle(humanizeSlider); toggle(swingSlider);
+        toggle(seedTitleLabel); toggle(seedValueLabel); toggle(seedLockBtn);
         toggle(subgenreSelector); toggle(genModeSelector);
         toggle(previewToggle); toggle(previewWaveSelector); toggle(previewWaveLabel); toggle(previewVolSlider); toggle(previewVolLabel);
         toggle(generateButton); toggle(variationButton);
@@ -921,6 +923,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         toggle(patternLabel); toggle(progressionLabel); toggle(phraseLabel);
         toggle(densityLabel); toggle(acidLabel); toggle(ornamentLabel);
         toggle(graceLabel); toggle(rhythmLabel); toggle(pitchLabel);
+        toggle(humanizeLabel); toggle(swingLabel);
         toggle(octaveLabel); toggle(subgenreLabel); toggle(genModeLabel);
         toggle(laneLabel);
         // Subgenre pills and lane tabs
@@ -957,6 +960,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         variationButton.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::Variation).toUpperCase());
         exportMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::ExportMidi).toUpperCase());
         copyMidiBtn.setButtonText(PsyMelody::tr(lang, PsyMelody::Str::QuickSave).toUpperCase());
+        applyTooltips();
         repaint();
     };
     addChildComponent(settingsPage);  // addChild, NOT addAndMakeVisible
@@ -980,13 +984,16 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 userPreset.params.graceAmount = (float)xml->getDoubleAttribute("graceAmount", 0.0);
                 userPreset.params.phraseLengthBars = xml->getIntAttribute("phraseLengthBars", 4);
                 userPreset.params.baseOctave = xml->getIntAttribute("baseOctave", 4);
-                userPreset.params.patternCategory = xml->getIntAttribute("patternCategory", 1);
+                userPreset.params.patternCategory =
+                    std::clamp(xml->getIntAttribute("patternCategory", 1), 0, 4);
                 userPreset.params.progression = xml->getIntAttribute("progression", 0);
                 userPreset.params.density = (float)xml->getDoubleAttribute("density", 0.6);
                 userPreset.params.acidAmount = (float)xml->getDoubleAttribute("acidAmount", 0.5);
                 userPreset.params.ornamentAmount = (float)xml->getDoubleAttribute("ornamentAmount", 0.3);
                 userPreset.params.rhythmVariation = (float)xml->getDoubleAttribute("rhythmVariation", 0.4);
                 userPreset.params.pitchRange = (float)xml->getDoubleAttribute("pitchRange", 0.5);
+                userPreset.params.humanize = (float)xml->getDoubleAttribute("humanize", 0.0);
+                userPreset.params.swing = (float)xml->getDoubleAttribute("swing", 0.0);
 
                 // Load sequence
                 auto* seqXml = xml->getChildByName("Sequence");
@@ -1284,7 +1291,25 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     setupSlider(graceSlider, graceLabel, "Grace", 0, 1, 0.0);
     setupSlider(rhythmVarSlider, rhythmLabel, "Rhythm Var", 0, 1, 0.4);
     setupSlider(pitchRangeSlider, pitchLabel, "Pitch Range", 0, 1, 0.5);
+    setupSlider(humanizeSlider, humanizeLabel, "Humanize", 0, 1, 0.0);
+    setupSlider(swingSlider, swingLabel, "Swing", 0, 1, 0.0);
     setupSlider(octaveSlider, octaveLabel, "Octave", 2, 6, 4, 1);
+
+    // SEED cell (control strip): value display + lock toggle
+    seedTitleLabel.setText("SEED", juce::dontSendNotification);
+    addAndMakeVisible(seedTitleLabel);
+    seedValueLabel.setJustificationType(juce::Justification::centredLeft);
+    seedValueLabel.setColour(juce::Label::textColourId, psyLnf.primary);
+    seedValueLabel.setColour(juce::Label::backgroundColourId, juce::Colour(0xff000000));
+    addAndMakeVisible(seedValueLabel);
+    seedLockBtn.setClickingTogglesState(true);
+    seedLockBtn.onClick = [this] {
+        psyProcessor.setSeedLocked(seedLockBtn.getToggleState());
+        updateSeedDisplay();
+        repaint();  // padlock icon is drawn in paintOverChildren
+    };
+    addAndMakeVisible(seedLockBtn);
+    updateSeedDisplay();
     octaveSlider.setSliderStyle(juce::Slider::LinearBarVertical);
     octaveSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     octaveSlider.setColour(juce::Slider::trackColourId, juce::Colour(0xff000000));
@@ -1325,7 +1350,9 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             psyProcessor.generateNewPhrase();
         }
         updatePianoRoll();
+        updateSeedDisplay();
     };
+    generateButton.onMenuRequested = [this] { showRegenerateMenu(); };
     generateButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff005762));
     generateButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff81ecff));
     addAndMakeVisible(generateButton);
@@ -1378,6 +1405,18 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 }
             }
         });
+    };
+    exportMidiBtn.prepareDragFile = [this]() -> juce::File {
+        const auto& phrase = psyProcessor.getCurrentPhrase();
+        if (phrase.empty()) return {};
+        double bpm = psyProcessor.getGeneratorParams().bpm;
+        if (auto* ph = psyProcessor.getPlayHead())
+            if (auto pos = ph->getPosition())
+                if (auto b = pos->getBpm()) bpm = *b;
+        auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                        .getChildFile("PsyMelody.mid");
+        if (!PsyMelody::MidiExport::exportToFile(phrase, file, bpm)) return {};
+        return file;
     };
     addAndMakeVisible(exportMidiBtn);
 
@@ -1551,6 +1590,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
 
     syncFromParams();
     updatePianoRoll();
+    applyTooltips();
     resized();  // Ensure all label fonts are applied after full setup
 
     // Poll for host-driven state restores while the editor is open
@@ -1682,6 +1722,8 @@ void PsyMelodyEditor::saveUserPreset()
                     state.setProperty("ornamentAmount", p.ornamentAmount, nullptr);
                     state.setProperty("rhythmVariation", p.rhythmVariation, nullptr);
                     state.setProperty("pitchRange", p.pitchRange, nullptr);
+                    state.setProperty("humanize", p.humanize, nullptr);
+                    state.setProperty("swing", p.swing, nullptr);
 
                     // Save sequence
                     juce::ValueTree seqNode("Sequence");
@@ -1724,6 +1766,108 @@ void PsyMelodyEditor::setupSlider(juce::Slider& slider, juce::Label& label,
     addAndMakeVisible(label);
 }
 
+void PsyMelodyEditor::updateSeedDisplay()
+{
+    seedValueLabel.setText(" " + juce::String((int)psyProcessor.getCurrentSeed()),
+                           juce::dontSendNotification);
+    seedLockBtn.setToggleState(psyProcessor.isSeedLocked(), juce::dontSendNotification);
+}
+
+void PsyMelodyEditor::showRegenerateMenu()
+{
+    bool melodyMode = (psyProcessor.getGenMode() == PsyMelodyProcessor::GenMode::Melody);
+
+    juce::PopupMenu menu;
+    menu.setLookAndFeel(&psyLnf);
+    menu.addItem(1, PsyMelody::tr(currentLang, PsyMelody::Str::RegenPitches), melodyMode);
+    menu.addItem(2, PsyMelody::tr(currentLang, PsyMelody::Str::RegenRhythm), melodyMode);
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options().withTargetComponent(&generateButton),
+        [this](int result) {
+            if (result == 0) return;
+            syncToParams();
+            pianoRoll.clearSelection();
+            if (result == 1)
+                psyProcessor.regeneratePitches();
+            else
+                psyProcessor.regenerateRhythm();
+            updatePianoRoll();
+            updateSeedDisplay();
+        });
+}
+
+void PsyMelodyEditor::applyTooltips()
+{
+    using S = PsyMelody::Str;
+    auto tip = [this](S key) { return PsyMelody::tr(currentLang, key); };
+
+    // Control strip
+    rootNoteSelector.setTooltip(tip(S::TipRoot));
+    scaleSelector.setTooltip(tip(S::TipScale));
+    bpmSlider.setTooltip(tip(S::TipBpm));
+    phraseLengthSlider.setTooltip(tip(S::TipPhraseLength));
+    octaveSlider.setTooltip(tip(S::TipOctave));
+    patternCategorySelector.setTooltip(tip(S::TipPattern));
+    progressionSelector.setTooltip(tip(S::TipChords));
+
+    // Subgenre pills + style selectors
+    subGoaBtn.setTooltip(tip(S::TipGoa));
+    subFullOnBtn.setTooltip(tip(S::TipFullOn));
+    subDarkBtn.setTooltip(tip(S::TipDarkPsy));
+    subProgBtn.setTooltip(tip(S::TipProgressive));
+    bassStyleSelector.setTooltip(tip(S::TipBassStyle));
+    voicingStyleSelector.setTooltip(tip(S::TipVoicingStyle));
+
+    // Sidebar
+    navMelodyBtn.setTooltip(tip(S::TipNavMelody));
+    navBasslineBtn.setTooltip(tip(S::TipNavBassline));
+    navChordBtn.setTooltip(tip(S::TipNavChord));
+    navManualBtn.setTooltip(tip(S::TipNavSettings));
+    settingsBtn.setTooltip(tip(S::TipNavSettings));
+    undoBtn.setTooltip(tip(S::TipUndo));
+    redoBtn.setTooltip(tip(S::TipRedo));
+
+    // Expression knobs
+    densitySlider.setTooltip(tip(S::TipDensity));
+    acidSlider.setTooltip(tip(S::TipAcid));
+    ornamentSlider.setTooltip(tip(S::TipOrnament));
+    graceSlider.setTooltip(tip(S::TipGrace));
+    rhythmVarSlider.setTooltip(tip(S::TipRhythmVar));
+    pitchRangeSlider.setTooltip(tip(S::TipPitchRange));
+    humanizeSlider.setTooltip(tip(S::TipHumanize));
+    swingSlider.setTooltip(tip(S::TipSwing));
+
+    // Seed cell
+    seedValueLabel.setTooltip(tip(S::TipSeed));
+    seedLockBtn.setTooltip(tip(S::TipSeedLock));
+
+    // Header presets
+    presetSelector.setTooltip(tip(S::TipPreset));
+    savePresetBtn.setTooltip(tip(S::TipSavePreset));
+
+    // Footer
+    generateButton.setTooltip(tip(S::TipGenerate));
+    variationButton.setTooltip(tip(S::TipVariation));
+    exportMidiBtn.setTooltip(tip(S::TipExportMidi));
+    importMidiBtn.setTooltip(tip(S::TipImportMidi));
+    copyMidiBtn.setTooltip(tip(S::TipQuickSave));
+    quickSaveDirBtn.setTooltip(tip(S::TipQuickSaveDir));
+    previewToggle.setTooltip(tip(S::TipPreviewToggle));
+    previewWaveSelector.setTooltip(tip(S::TipPreviewWave));
+    previewVolSlider.setTooltip(tip(S::TipPreviewVol));
+
+    // Lane tabs + piano roll zoom overlay
+    laneVelBtn.setTooltip(tip(S::TipLaneVel));
+    lanePanBtn.setTooltip(tip(S::TipLanePan));
+    lanePitchBtn.setTooltip(tip(S::TipLanePitch));
+    pianoRoll.zoomOutXBtn.setTooltip(tip(S::TipZoomOutX));
+    pianoRoll.zoomInXBtn.setTooltip(tip(S::TipZoomInX));
+    pianoRoll.zoomOutYBtn.setTooltip(tip(S::TipZoomOutY));
+    pianoRoll.zoomInYBtn.setTooltip(tip(S::TipZoomInY));
+    pianoRoll.zoomFitBtn.setTooltip(tip(S::TipZoomFit));
+}
+
 void PsyMelodyEditor::syncFromParams()
 {
     const auto& p = psyProcessor.getGeneratorParams();
@@ -1741,6 +1885,9 @@ void PsyMelodyEditor::syncFromParams()
     rhythmVarSlider.setValue(p.rhythmVariation, juce::dontSendNotification);
     pitchRangeSlider.setValue(p.pitchRange, juce::dontSendNotification);
     octaveSlider.setValue(p.baseOctave, juce::dontSendNotification);
+    humanizeSlider.setValue(p.humanize, juce::dontSendNotification);
+    swingSlider.setValue(p.swing, juce::dontSendNotification);
+    updateSeedDisplay();
 }
 
 
@@ -1761,6 +1908,8 @@ void PsyMelodyEditor::syncToParams()
     p.rhythmVariation = (float)rhythmVarSlider.getValue();
     p.pitchRange = (float)pitchRangeSlider.getValue();
     p.baseOctave = (int)octaveSlider.getValue();
+    p.humanize = (float)humanizeSlider.getValue();
+    p.swing = (float)swingSlider.getValue();
 }
 
 void PsyMelodyEditor::updatePianoRoll()
@@ -1852,14 +2001,14 @@ void PsyMelodyEditor::paint(juce::Graphics& g)
     int ctrlW2 = (contentW2 - 12) / 4;
     int rightPanelW = ctrlW2;
     int knobAreaW = contentW2 - rightPanelW;
-    int cardW2 = (knobAreaW - 15) / 6;
+    int cardW2 = (knobAreaW - 21) / 8;
     // Knob card backgrounds
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 8; ++i) {
         g.setColour(psyLnf.surfaceContainerHigh);
         g.fillRect(bentoX + i * (cardW2 + 3), bentoY, cardW2, bentoH);
     }
     // Right panel background
-    int rightPanelX = bentoX + 6 * (cardW2 + 3);
+    int rightPanelX = bentoX + 8 * (cardW2 + 3);
     g.setColour(psyLnf.surfaceContainerHigh);
     g.fillRect(rightPanelX, bentoY, getWidth() - 8 - rightPanelX, bentoH);
 
@@ -2048,6 +2197,31 @@ void PsyMelodyEditor::paintOverChildren(juce::Graphics& g)
         drawIcon(undoBtn, true);
         drawIcon(redoBtn, false);
     }
+
+    // ---- Seed padlock icon (over seedLockBtn) ----
+    if (seedLockBtn.isVisible()) {
+        auto b = seedLockBtn.getBounds().toFloat();
+        bool locked = seedLockBtn.getToggleState();
+        g.setColour(locked ? psyLnf.primary
+                           : (seedLockBtn.isMouseOver()
+                                  ? psyLnf.onSurfaceVariant
+                                  : psyLnf.onSurfaceVariant.withAlpha(0.5f)));
+        float cx = b.getCentreX(), cy = b.getCentreY();
+        // Body
+        juce::Rectangle<float> body(cx - 5.0f, cy - 1.0f, 10.0f, 8.0f);
+        g.fillRect(body);
+        // Shackle: closed arc when locked, swung open when unlocked
+        juce::Path shackle;
+        if (locked)
+            shackle.addArc(cx - 3.5f, cy - 8.0f, 7.0f, 8.0f,
+                           -juce::MathConstants<float>::halfPi,
+                           juce::MathConstants<float>::halfPi, true);
+        else
+            shackle.addArc(cx - 0.5f, cy - 8.0f, 7.0f, 8.0f,
+                           -juce::MathConstants<float>::halfPi,
+                           juce::MathConstants<float>::halfPi * 0.5f, true);
+        g.strokePath(shackle, juce::PathStrokeType(1.6f));
+    }
 }
 
 void PsyMelodyEditor::resized()
@@ -2125,6 +2299,18 @@ void PsyMelodyEditor::resized()
     bpmSlider.setBounds(bpmArea.reduced(1, 0));
     controlStrip.removeFromLeft(4);
 
+    // Seed (value display + lock toggle)
+    auto seedArea = controlStrip.removeFromLeft(104);
+    seedTitleLabel.setText("SEED", juce::dontSendNotification);
+    seedTitleLabel.setBounds(seedArea.removeFromTop(10));
+    seedTitleLabel.setFont(psyLnf.uiFontBold.withHeight(11.0f));
+    seedTitleLabel.setColour(juce::Label::textColourId, psyLnf.outline);
+    seedTitleLabel.setJustificationType(juce::Justification::centredLeft);
+    seedLockBtn.setBounds(seedArea.removeFromRight(26).reduced(1, 0));
+    seedValueLabel.setBounds(seedArea.reduced(1, 0));
+    seedValueLabel.setFont(psyLnf.uiFontBold.withHeight(14.0f));
+    controlStrip.removeFromLeft(4);
+
     // Phrase + Octave
     auto phraseArea = controlStrip.removeFromLeft(ctrlW);
     phraseLabel.setText("PHRASE / OCTAVE", juce::dontSendNotification);
@@ -2158,8 +2344,8 @@ void PsyMelodyEditor::resized()
     auto bentoArea = area.removeFromTop(80);
     // Right panel = 4th column width
     auto rightPanel = bentoArea.removeFromRight(ctrlW);
-    // Knobs fill the remaining 3 columns
-    int knobW = (bentoArea.getWidth() - 15) / 6;
+    // Knobs fill the remaining 3 columns (8 cards, 7 gaps of 3px)
+    int knobW = (bentoArea.getWidth() - 21) / 8;
 
     auto placeKnob = [&](juce::Slider& s, juce::Label& l, const juce::String& name,
                           juce::Rectangle<int> cell) {
@@ -2177,7 +2363,9 @@ void PsyMelodyEditor::resized()
     auto k3 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
     auto k4 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
     auto k5 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
-    auto k6 = bentoArea;
+    auto k6 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
+    auto k7 = bentoArea.removeFromLeft(knobW); bentoArea.removeFromLeft(3);
+    auto k8 = bentoArea;
 
     placeKnob(densitySlider, densityLabel, "DENSITY", k1);
     placeKnob(acidSlider, acidLabel, "ACID", k2);
@@ -2185,6 +2373,8 @@ void PsyMelodyEditor::resized()
     placeKnob(graceSlider, graceLabel, "GRACE", k4);
     placeKnob(rhythmVarSlider, rhythmLabel, "RHYTHM", k5);
     placeKnob(pitchRangeSlider, pitchLabel, "PITCH RNG", k6);
+    placeKnob(humanizeSlider, humanizeLabel, "HUMANIZE", k7);
+    placeKnob(swingSlider, swingLabel, "SWING", k8);
 
     // Right panel: Subgenre pills + Bass Style / Voicing Style
     rightPanel = rightPanel.reduced(4, 4);
@@ -2262,9 +2452,11 @@ void PsyMelodyEditor::resized()
     variationButton.setBounds(footer.removeFromLeft(varW).reduced(1, btnY));
     footer.removeFromLeft(6);
 
-    // Group 2: Export/Import MIDI (same width)
+    // Group 2: Export/Import MIDI (export is wider by its drag grip so the
+    // label keeps the same text area as import)
     int midiW = 86;
-    exportMidiBtn.setBounds(footer.removeFromLeft(midiW).reduced(1, btnY));
+    exportMidiBtn.setBounds(
+        footer.removeFromLeft(midiW + DraggableExportButton::gripWidth).reduced(1, btnY));
     importMidiBtn.setBounds(footer.removeFromLeft(midiW).reduced(1, btnY));
     footer.removeFromLeft(6);
 
