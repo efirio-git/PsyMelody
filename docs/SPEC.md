@@ -1,6 +1,6 @@
 # PsyMelody 仕様書
 
-対象バージョン: v0.1.1（v0.1.0 のバグ修正・仕様確定版）
+対象バージョン: v0.1.2 開発版（v0.1.1 + D&Dエクスポート / ツールチップ / 生成エンジン強化）
 最終更新: 2026-08-07
 
 ---
@@ -100,6 +100,15 @@ MidiPatternEngine（PPQ 同期ループ再生）──► MIDI 出力（DAW へ�
 | `graceAmount` | float | 0.0 (OFF) | 0–1 | GRACE ノブ |
 | `rhythmVariation` | float | 0.4 | 0–1 | RHYTHM VAR ノブ |
 | `pitchRange` | float | 0.5 | 0–1 | PITCH RNG ノブ |
+| `humanize` | float | 0.0 | 0–1 | HUMANIZE ノブ（タイミング±0.03拍・ベロシティ±15%の揺らぎ） |
+| `swing` | float | 0.0 | 0–1 | SWING ノブ（16分裏拍を最大トリプレット位置=+1/12拍まで遅延） |
+
+構造体末尾への追記のみ許可（`Presets.h` が位置指定集成体初期化のため、途中挿入は全ファクトリープリセットを黙って壊す）。
+
+**シード**（GeneratorParams外・Processor所有）: `currentSeed`（0〜999999）と `seedLocked`。
+生成アクションのたびに未ロックなら新シードを採番し、3ジェネレータ全てに `setSeed()`。
+ロック中は同シード再利用 → GENERATE が完全に同一フレーズを再現する。
+VARIATION と部分再生成は再シードしない（押すたびに変化するのが仕様）。
 
 ### 3.2 UI 専用（DAW プロジェクトに保存されない）
 
@@ -135,7 +144,10 @@ MidiPatternEngine（PPQ 同期ループ再生）──► MIDI 出力（DAW へ�
 | 40–47 | Dark Psy 専用 |
 | 48–55 | Progressive Psy 専用 |
 
-- サブジャンルが Goa(0) のときのみ `patternCategory` が有効。他サブジャンルは専用帯域に固定。
+- サブジャンルが Goa(0) のときのみ `patternCategory`（0〜3）が有効。他サブジャンルは専用帯域に固定。
+- **Euclidean（patternCategory=4）は例外的に全サブジャンルで有効**。Bjorklundアルゴリズムで
+  16ステップに `k = round(density×15)+1` 個の打点を均等配置（回転はモチーフごとにランダム）。
+  既存の間引き/ゴースト処理はそのまま適用されるため Rhythm Var も効く。
 - 小節ごとに `density` とランダム変位（±2）でパターンを選択。`rhythmVariation` が高いほど
   ヒットの間引き＋まれな追加ヒットが発生。
 
@@ -173,7 +185,22 @@ MidiPatternEngine（PPQ 同期ループ再生）──► MIDI 出力（DAW へ�
 **VARIATION**: 既存フレーズの各ノートを `variationAmount=0.3` 基準で音程 / タイミング /
 ベロシティ変異させ、終止処理を再適用。フレーズ未生成時は新規生成にフォールバック。
 
-乱数は `std::mt19937`（`random_device` シード）。シード指定 UI はなし（既知制約 §9）。
+**グルーヴ段（Humanize / Swing）**: 生成直後にプロセッサが全モード共通で適用
+（VARIATION には再適用しない）。オフセットは**16分スロット単位で共有**するため、和音は
+まとまって動き、装飾音は親ノートに追従する。スライドノートの duration はグルーヴ後の
+隣接ノート位置に対して再計算される（レガート維持）。装飾音は対象外。
+
+**部分再生成（Melodyモードのみ、GENERATE の ▾ メニュー）**:
+- **音程のみ再生成**: 位置・長さ・ベロシティ・アーティキュレーションを保持し、
+  音程だけをサブジャンル別重みテーブル + コード進行で歩き直す。コール&レスポンスと
+  終止処理を再適用。装飾音は新しい親から再導出
+- **リズムのみ再生成**: 新フレーズを生成し、旧フレーズの (時刻, 音程) を
+  時間ベースで対応付けて音程を移植（「いつどの音が鳴るか」を保持）。
+  トリル長のノートは装飾性維持のため対象外
+- どちらも常にフリー乱数（シードロック中でも押すたびに変わる）
+
+**シード**: `GoaMelodyGenerator` / `BasslineGenerator` / `ChordVoicingGenerator` すべて
+`std::mt19937` + `setSeed()` 対応。SEED表示とロックトグルは §3.1 参照。
 
 ### 4.2 Bassline（BasslineGenerator）
 
@@ -223,8 +250,9 @@ Progressive(4)。パラメータのみを持ち、ロード時に新規生成が
 ### 5.2 ユーザープリセット
 
 - 保存先: `~/Documents/EDEN/PsyMelody/Presets/<name>.xml`（スペース・`/`・`\` は `_` に置換）
-- ルートタグ `PsyMelodyPreset`。**全 14 パラメータ**（`bpm` / `subgenre` / `graceAmount` を
-  含む）+ `Sequence > Note`（属性 `nn, vel, pan, start, dur, pb, acc, sld, grace`）を保存。
+- ルートタグ `PsyMelodyPreset`。**全 16 パラメータ**（`bpm` / `subgenre` / `graceAmount` /
+  `humanize` / `swing` を含む。シードは含まない）+ `Sequence > Note`
+  （属性 `nn, vel, pan, start, dur, pb, acc, sld, grace`）を保存。
 - 旧形式ファイル（bpm 等なし）はデフォルト値で読み込まれる（後方互換）。
 - 起動時に走査され、カテゴリ "User" として一覧末尾に表示。
 
@@ -249,7 +277,11 @@ Progressive(4)。パラメータのみを持ち、ロード時に新規生成が
 - `MidiExport::exportToFile`: ticksPerBeat=480、テンポ + 拍子（4/4）メタイベント付き、
   単一トラック SMF。DAW BPM 検出時はそちらを優先。
 - ピッチベンドはノート前送出 + ノート後リセット。**CC10 パンも on-change で書き出す。**
-- EXPORT MIDI ボタン: FileChooser（デフォルト `~/Desktop/PsyMelody.mid`）。
+- EXPORT MIDI ボタン（分割ボタン）: 左クリック → FileChooser（デフォルト `~/Desktop/PsyMelody.mid`）。
+  **右端グリップ（⁙）をドラッグ → 一時 .mid を生成してOSファイルドラッグ開始**、DAWへ直接
+  ドロップできる。FL Studio ではピアノロール / チャンネルラックへのドロップに対応
+  （プレイリストは FL 側の制約で不可。また FL のインポートはノート+ベロシティのみで
+  CC10 / ピッチホイールは取り込まれない）。
 - QUICK SAVE: 初回のみフォルダ選択、以降ワンクリック保存。`PsyMelody.mid` →
   `PsyMelody_1.mid` … と自動採番（上書きなし）。`[...]` でフォルダ変更。
 
@@ -263,10 +295,14 @@ CC10 → `pan`、pitch wheel → `pitchBend` を取り込み。小節数は自�
 ### 7.1 レイアウト
 
 ヘッダ（タイトル + プリセット選択/保存）、左サイドバー（MELODY / BASSLINE / CHORD /
-SETTINGS + UNDO / REDO）、コントロールストリップ（ROOT/SCALE、BPM、PHRASE/OCTAVE、
-PATTERN/CHORDS）、6 ノブ列 + サブジャンルピル + スタイル選択、ピアノロール、
-レーンエディタ（VELOCITY / PAN / PITCH BEND タブ）、フッタ
-（GENERATE / VARIATION / EXPORT / IMPORT / PREVIEW 系 / QUICK SAVE）。
+SETTINGS + UNDO / REDO）、コントロールストリップ（ROOT/SCALE、BPM、**SEED（値表示 +
+ロックトグル）**、PHRASE/OCTAVE、PATTERN/CHORDS）、**8 ノブ列**（DENSITY / ACID /
+ORNAMENT / GRACE / RHYTHM / PITCH RNG / HUMANIZE / SWING）+ サブジャンルピル +
+スタイル選択、ピアノロール、レーンエディタ（VELOCITY / PAN / PITCH BEND タブ）、フッタ
+（GENERATE（分割ボタン、▾で部分再生成メニュー）/ VARIATION / EXPORT（分割ボタン、
+グリップでD&D）/ IMPORT / PREVIEW 系 / QUICK SAVE）。
+
+**ツールチップ**: 全コントロールに搭載。言語設定（英/日）に連動して切り替わる。
 
 デザインは "Neon Architect"（`PsyMelodyLookAndFeel`）: surface `#0e0e13`、
 primary シアン `#81ecff`、secondary マゼンタ `#ff59e3`、tertiary パープル `#ba84ff`、
@@ -318,7 +354,8 @@ Velocity（0.05–1.0）/ Pan（−1〜1）/ Pitch（±8192）をクリック / 
 `getStateInformation` / `setStateInformation` は `ValueTree("PsyMelodyState")` の
 バイナリ形式で以下を保存・復元する:
 
-1. **全 14 GeneratorParams**（読み込み時に §3.1 の範囲へクランプ検証）
+1. **全 16 GeneratorParams**（読み込み時に §3.1 の範囲へクランプ検証）+ `seed`
+   （juce::int64 経由）+ `seedLocked`
 2. **編集済みシーケンス**: `Sequence > Note` 子ツリー
    （属性はユーザープリセットと同一: `nn, vel, pan, start, dur, pb, acc, sld, grace`）
 
@@ -338,7 +375,7 @@ Quick Save フォルダ、ズーム / スクロール位置、Undo 履歴。
 | ホストオートメーション不可 | APVTS 不使用（§3.3）。 |
 | PlayHead 必須 | PlayHead を提供しないホストでは出力なし。プレビュー音もトランスポート再生中のみ。 |
 | ウィンドウ固定 | 960×720、リサイズ・スケーリング非対応。 |
-| 生成の再現性なし | シード指定 UI なし（`setSeed()` API は内部に存在）。 |
+| シードの再現範囲 | シードが再現するのは GENERATE 結果のみ。VARIATION / 部分再生成 / 手編集後のフレーズはシードから再現不可（フレーズ自体は状態保存で残る）。Undo はシード値を復元しない。 |
 | MIDI チャンネル 1 固定 | 出力・エクスポートとも。パン CC10 はチャンネル単位のため同時発音内での個別パンは不可。 |
 | フレーズ跨ぎノート | ノートはフレーズ長を超えられない（生成時にフレーズ長が終端まで切り上がるため実質発生しない）。終端ちょうどのノートはループ直前で note-off。 |
 | Preview フィルタ固定 | カットオフ 2.6kHz 相当・レゾナンス 0.2（UI 非公開）。 |
