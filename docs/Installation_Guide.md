@@ -1,4 +1,4 @@
-# PsyMelody v0.1.0 - Installation Guide
+# PsyMelody v0.1.1 - Installation Guide
 ## Psytrance Melody Generator by EDEN
 
 ---
@@ -7,7 +7,7 @@
 
 ### Using the Installer (Recommended)
 
-1. Open `PsyMelody_v0.1.0.dmg`
+1. Open `PsyMelody_v0.1.1.dmg`
 2. Double-click `PsyMelody_Installer.pkg`
 3. Follow the on-screen instructions
 4. Click **Customize** to select which formats to install:
@@ -245,4 +245,4 @@ PsyMelody includes a built-in preview synthesizer so you can hear melodies witho
 
 ---
 
-*PsyMelody v0.1.0 - Copyright (c) 2026 EDEN*
+*PsyMelody v0.1.1 - Copyright (c) 2026 EDEN*
