@@ -1,4 +1,4 @@
-# PsyMelody v0.1.0 - 導入手順書
+# PsyMelody v0.1.1 - 導入手順書
 ## Psytrance Melody Generator by EDEN
 
 ---
@@ -7,7 +7,7 @@
 
 ### インストーラーを使用（推奨）
 
-1. `PsyMelody_v0.1.0.dmg` を開く
+1. `PsyMelody_v0.1.1.dmg` を開く
 2. `PsyMelody_Installer.pkg` をダブルクリック
 3. 画面の指示に従ってインストール
 4. **カスタマイズ** をクリックしてインストールするフォーマットを選択:
@@ -233,4 +233,4 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 
 ---
 
-*PsyMelody v0.1.0 - Copyright (c) 2026 EDEN*
+*PsyMelody v0.1.1 - Copyright (c) 2026 EDEN*
