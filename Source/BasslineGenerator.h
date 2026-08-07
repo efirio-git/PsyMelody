@@ -35,6 +35,8 @@ class BasslineGenerator {
 public:
     BasslineGenerator() : rng(std::random_device{}()) {}
 
+    void setSeed(unsigned int seed) { rng.seed(seed); }
+
     std::vector<NoteEvent> generateBassline(const BassParams& params)
     {
         std::vector<NoteEvent> events;

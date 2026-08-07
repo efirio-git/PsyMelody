@@ -6,6 +6,17 @@ PsyMelodyProcessor::PsyMelodyProcessor()
     : AudioProcessor(BusesProperties()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
+    // Random initial seed so the SEED display never shows a meaningless 0
+    currentSeed = (unsigned int)juce::Random::getSystemRandom().nextInt(1000000);
+}
+
+void PsyMelodyProcessor::prepareSeedForGenerate()
+{
+    if (!seedLocked)
+        currentSeed = (unsigned int)juce::Random::getSystemRandom().nextInt(1000000);
+    generator.setSeed(currentSeed);
+    bassGenerator.setSeed(currentSeed);
+    chordGenerator.setSeed(currentSeed);
 }
 
 PsyMelodyProcessor::~PsyMelodyProcessor() {}
@@ -75,21 +86,55 @@ void PsyMelodyProcessor::generateNewPhrase()
 {
     pushUndoState();
     previewSynth.allNotesOff();
+    prepareSeedForGenerate();
     currentPhrase = generator.generatePhrase(genParams);
+    generator.applyGroove(currentPhrase, genParams.humanize, genParams.swing);
     patternEngine.loadPhrase(currentPhrase);
 }
 
 void PsyMelodyProcessor::generateBassline(const PsyMelody::BassParams& params)
 {
     pushUndoState();
+    previewSynth.allNotesOff();
+    prepareSeedForGenerate();
     currentPhrase = bassGenerator.generateBassline(params);
+    generator.applyGroove(currentPhrase, genParams.humanize, genParams.swing);
     patternEngine.loadPhrase(currentPhrase);
 }
 
 void PsyMelodyProcessor::generateChordVoicing(const PsyMelody::ChordVoicingParams& params)
 {
     pushUndoState();
+    previewSynth.allNotesOff();
+    prepareSeedForGenerate();
     currentPhrase = chordGenerator.generateVoicing(params);
+    generator.applyGroove(currentPhrase, genParams.humanize, genParams.swing);
+    patternEngine.loadPhrase(currentPhrase);
+}
+
+void PsyMelodyProcessor::regeneratePitches()
+{
+    if (currentPhrase.empty()) {
+        generateNewPhrase();
+        return;
+    }
+    pushUndoState();
+    previewSynth.allNotesOff();
+    // Timing is untouched (and already grooved), so no applyGroove here
+    currentPhrase = generator.regeneratePitchesOnly(currentPhrase, genParams);
+    patternEngine.loadPhrase(currentPhrase);
+}
+
+void PsyMelodyProcessor::regenerateRhythm()
+{
+    if (currentPhrase.empty()) {
+        generateNewPhrase();
+        return;
+    }
+    pushUndoState();
+    previewSynth.allNotesOff();
+    currentPhrase = generator.regenerateRhythmOnly(currentPhrase, genParams);
+    generator.applyGroove(currentPhrase, genParams.humanize, genParams.swing);
     patternEngine.loadPhrase(currentPhrase);
 }
 
@@ -121,6 +166,11 @@ void PsyMelodyProcessor::getStateInformation(juce::MemoryBlock& destData)
     state.setProperty("graceAmount", genParams.graceAmount, nullptr);
     state.setProperty("rhythmVariation", genParams.rhythmVariation, nullptr);
     state.setProperty("pitchRange", genParams.pitchRange, nullptr);
+    state.setProperty("humanize", genParams.humanize, nullptr);
+    state.setProperty("swing", genParams.swing, nullptr);
+    // juce::var has no unsigned type - store the seed through int64
+    state.setProperty("seed", (juce::int64)currentSeed, nullptr);
+    state.setProperty("seedLocked", seedLocked, nullptr);
 
     // Persist the edited sequence (same attribute names as user preset XML)
     juce::ValueTree seq("Sequence");
@@ -154,7 +204,7 @@ void PsyMelodyProcessor::setStateInformation(const void* data, int sizeInBytes)
         setBpm(std::clamp((float)state.getProperty("bpm", 145.0f), 60.0f, 200.0f));
         genParams.phraseLengthBars = std::clamp((int)state.getProperty("phraseLengthBars", 4), 1, 16);
         genParams.baseOctave = std::clamp((int)state.getProperty("baseOctave", 4), 2, 6);
-        genParams.patternCategory = std::clamp((int)state.getProperty("patternCategory", 1), 0, 3);
+        genParams.patternCategory = std::clamp((int)state.getProperty("patternCategory", 1), 0, 4);
         genParams.progression = std::clamp((int)state.getProperty("progression", 0), 0, 8);
         genParams.subgenre = std::clamp((int)state.getProperty("subgenre", 0), 0, 3);
         genParams.density = std::clamp((float)state.getProperty("density", 0.6f), 0.0f, 1.0f);
@@ -163,6 +213,10 @@ void PsyMelodyProcessor::setStateInformation(const void* data, int sizeInBytes)
         genParams.graceAmount = std::clamp((float)state.getProperty("graceAmount", 0.0f), 0.0f, 1.0f);
         genParams.rhythmVariation = std::clamp((float)state.getProperty("rhythmVariation", 0.4f), 0.0f, 1.0f);
         genParams.pitchRange = std::clamp((float)state.getProperty("pitchRange", 0.5f), 0.0f, 1.0f);
+        genParams.humanize = std::clamp((float)state.getProperty("humanize", 0.0f), 0.0f, 1.0f);
+        genParams.swing = std::clamp((float)state.getProperty("swing", 0.0f), 0.0f, 1.0f);
+        currentSeed = (unsigned int)(juce::int64)state.getProperty("seed", (juce::int64)currentSeed);
+        seedLocked = (bool)state.getProperty("seedLocked", false);
 
         auto seq = state.getChildWithName("Sequence");
         if (seq.isValid()) {

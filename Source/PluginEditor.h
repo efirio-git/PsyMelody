@@ -150,6 +150,74 @@ private:
     bool gripPressed = false;
 };
 
+// Split GENERATE button: the main area generates on click, the ▾ zone on the
+// right opens a menu with partial-regeneration actions
+class GenerateSplitButton : public juce::TextButton {
+public:
+    using juce::TextButton::TextButton;
+
+    static constexpr int arrowWidth = 22;
+
+    // Invoked when the ▾ zone is pressed; the editor shows the menu
+    std::function<void()> onMenuRequested;
+
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        arrowPressed = isInArrow(e.getPosition());
+        juce::TextButton::mouseDown(e);
+        if (arrowPressed && onMenuRequested)
+            onMenuRequested();
+    }
+
+    void mouseUp(const juce::MouseEvent& e) override
+    {
+        // The arrow zone must not also fire the generate action
+        if (arrowPressed) {
+            arrowPressed = false;
+            setState(buttonNormal);
+            return;
+        }
+        juce::TextButton::mouseUp(e);
+    }
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override
+    {
+        auto& lf = getLookAndFeel();
+        lf.drawButtonBackground(g, *this,
+                                findColour(getToggleState() ? buttonOnColourId
+                                                            : buttonColourId),
+                                highlighted, down);
+        g.setFont(lf.getTextButtonFont(*this, getHeight()));
+        g.setColour(findColour(getToggleState() ? textColourOnId : textColourOffId)
+                        .withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
+        g.drawFittedText(getButtonText(),
+                         getLocalBounds().withTrimmedRight(arrowWidth).reduced(4, 2),
+                         juce::Justification::centred, 1);
+
+        auto zone = getLocalBounds().removeFromRight(arrowWidth);
+        // Background shift instead of a border line (design rule)
+        g.setColour(juce::Colour(0xff004450));
+        g.fillRect(zone);
+
+        bool hoverArrow = isMouseOver() && isInArrow(getMouseXYRelative());
+        g.setColour(hoverArrow ? juce::Colour(0xffcff6ff) : findColour(textColourOffId));
+        juce::Path arrow;
+        float cx = (float)zone.getCentreX(), cy = (float)zone.getCentreY();
+        arrow.addTriangle(cx - 4.0f, cy - 2.0f, cx + 4.0f, cy - 2.0f, cx, cy + 3.0f);
+        g.fillPath(arrow);
+    }
+
+    void mouseMove(const juce::MouseEvent& e) override
+    {
+        repaint();
+        juce::TextButton::mouseMove(e);
+    }
+
+private:
+    bool isInArrow(juce::Point<int> p) const { return p.x >= getWidth() - arrowWidth; }
+    bool arrowPressed = false;
+};
+
 // Editable piano roll display with playback cursor and zoom
 class PianoRollView : public juce::Component,
                       public juce::Timer {
@@ -282,10 +350,14 @@ private:
     juce::Slider previewVolSlider;
     juce::Slider densitySlider, acidSlider, ornamentSlider, graceSlider;
     juce::Slider rhythmVarSlider, pitchRangeSlider, phraseLengthSlider, octaveSlider;
+    juce::Slider humanizeSlider, swingSlider;
     juce::Slider bpmSlider;
     juce::Label bpmLabel;
+    juce::Label seedTitleLabel, seedValueLabel;
+    juce::TextButton seedLockBtn{""};
     juce::TextButton importMidiBtn{"IMPORT MIDI"};
-    juce::TextButton generateButton{"GENERATE"}, variationButton{"VARIATION"};
+    GenerateSplitButton generateButton{"GENERATE"};
+    juce::TextButton variationButton{"VARIATION"};
     juce::TextButton undoBtn{""}, redoBtn{""};
     DraggableExportButton exportMidiBtn{"EXPORT MIDI"};
     juce::TextButton copyMidiBtn{"QUICK SAVE"}, quickSaveDirBtn{"..."};
@@ -307,6 +379,7 @@ private:
 
     juce::Label rootLabel, scaleLabel, patternLabel, progressionLabel, densityLabel;
     juce::Label acidLabel, ornamentLabel, graceLabel, rhythmLabel, pitchLabel, phraseLabel, octaveLabel;
+    juce::Label humanizeLabel, swingLabel;
     juce::Label subgenreLabel, genModeLabel, bassStyleLabel, voicingStyleLabel, previewVolLabel, previewWaveLabel;
 
     juce::File quickSaveDir;
@@ -317,6 +390,8 @@ private:
 
     void setupSlider(juce::Slider&, juce::Label&, const juce::String&, double, double, double, double step=0.01);
     void applyTooltips();
+    void updateSeedDisplay();
+    void showRegenerateMenu();
     void syncFromParams();
     void syncToParams();
     void updatePianoRoll();

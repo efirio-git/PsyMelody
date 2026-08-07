@@ -44,6 +44,17 @@ public:
     void generateVariation();
     void generateBassline(const PsyMelody::BassParams& params);
     void generateChordVoicing(const PsyMelody::ChordVoicingParams& params);
+
+    // Partial regeneration (melody mode); always uses fresh entropy so
+    // repeated presses differ even while the seed is locked
+    void regeneratePitches();
+    void regenerateRhythm();
+
+    // Seed lock: locked seeds make GENERATE reproduce the exact same phrase
+    unsigned int getCurrentSeed() const { return currentSeed; }
+    void setCurrentSeed(unsigned int s) { currentSeed = s; }
+    bool isSeedLocked() const { return seedLocked; }
+    void setSeedLocked(bool locked) { seedLocked = locked; }
     PsyMelody::GeneratorParams& getGeneratorParams() { return genParams; }
     const PsyMelody::GeneratorParams& getGeneratorParams() const { return genParams; }
     const std::vector<PsyMelody::NoteEvent>& getCurrentPhrase() const { return currentPhrase; }
@@ -88,6 +99,12 @@ private:
     GenMode genMode = GenMode::Melody;
     PsyMelody::GeneratorParams genParams;
     std::vector<PsyMelody::NoteEvent> currentPhrase;
+
+    // Seed management: picks a fresh seed unless locked, then seeds all
+    // three generators so a locked GENERATE is fully deterministic
+    void prepareSeedForGenerate();
+    unsigned int currentSeed = 0;
+    bool seedLocked = false;
 
     double currentSampleRate = 44100.0;
     std::atomic<double> playbackPosition{0.0};
