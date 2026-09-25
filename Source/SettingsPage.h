@@ -10,7 +10,7 @@ public:
     void setJapaneseFont(const juce::Font& f) { jaFont = f; }
     juce::Font getTextButtonFont(juce::TextButton&, int) override { return jaFont; }
 private:
-    juce::Font jaFont = legacyFont(13.0f);
+    juce::Font jaFont = makeFont(13.0f);
 };
 
 // Inner component that draws the manual/about text (placed inside a Viewport)
@@ -18,8 +18,8 @@ class SettingsContent : public juce::Component {
 public:
     juce::String text;
     juce::String title;
-    juce::Font textFont = legacyFont(11.5f);
-    juce::Font titleFont = legacyFont(15.0f, juce::Font::bold);
+    juce::Font textFont = makeFont(11.5f);
+    juce::Font titleFont = makeFont(15.0f, juce::Font::bold);
     bool isManual = true;
 
     void updateHeight()
@@ -108,20 +108,20 @@ public:
                 "Noto Sans CJK JP", "Arial Unicode MS"
             };
             for (const auto& name : candidates) {
-                auto typeface = PsyMelody::legacyFont(name, 13.0f, juce::Font::plain).getTypefacePtr();
+                auto typeface = PsyMelody::makeFont(name, 13.0f, juce::Font::plain).getTypefacePtr();
                 if (typeface != nullptr && typeface->getName() == name)
                     return name;
             }
             return juce::String();
         }();
 
-        return jaTypefaceName.isNotEmpty() ? PsyMelody::legacyFont(jaTypefaceName, size, style)
-                                           : PsyMelody::legacyFont(size, style);
+        return jaTypefaceName.isNotEmpty() ? PsyMelody::makeFont(jaTypefaceName, size, style)
+                                           : PsyMelody::makeFont(size, style);
     }
 
     juce::Font getFontForLang(float size, int style = juce::Font::plain) const
     {
-        return currentLang == Lang::JA ? getJapaneseFont(size, style) : PsyMelody::legacyFont(size, style);
+        return currentLang == Lang::JA ? getJapaneseFont(size, style) : PsyMelody::makeFont(size, style);
     }
 
     void paint(juce::Graphics& g) override
