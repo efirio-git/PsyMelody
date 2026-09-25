@@ -28,7 +28,8 @@ public:
     double getPhraseLengthBeats() const { return phraseLengthBeats.load(); }
 
 private:
-    // phraseLock guards currentPhrase, activeNotes, flushActiveNotes and lastPanCC.
+    // phraseLock guards currentPhrase, activeNotes, flushActiveNotes, lastPanCC
+    // and the expected-next-beat state.
     // The message thread holds it only for a vector swap; the audio thread
     // uses a try-lock and skips the block on contention.
     juce::SpinLock phraseLock;
@@ -45,6 +46,12 @@ private:
     };
     std::vector<ActiveNote> activeNotes;
     int lastPanCC = -1;
+
+    // Where the next block should start if the transport runs on without a
+    // jump; used to detect loop wraps, locates and scrubs (audio thread only)
+    double expectedNextBeat = 0.0;
+    bool hasExpectedNextBeat = false;
+    static constexpr double jumpToleranceBeats = 0.01;
 
     void sendNoteOff(juce::MidiBuffer& buffer, const ActiveNote& note, int sampleOffset);
     void sendNoteOn(juce::MidiBuffer& buffer, int note, float velocity,
