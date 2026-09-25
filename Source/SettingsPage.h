@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Localization.h"
+#include "FontUtils.h"
 
 namespace PsyMelody {
 
@@ -9,7 +10,7 @@ public:
     void setJapaneseFont(const juce::Font& f) { jaFont = f; }
     juce::Font getTextButtonFont(juce::TextButton&, int) override { return jaFont; }
 private:
-    juce::Font jaFont{13.0f};
+    juce::Font jaFont = legacyFont(13.0f);
 };
 
 // Inner component that draws the manual/about text (placed inside a Viewport)
@@ -17,8 +18,8 @@ class SettingsContent : public juce::Component {
 public:
     juce::String text;
     juce::String title;
-    juce::Font textFont{11.5f};
-    juce::Font titleFont{15.0f, juce::Font::bold};
+    juce::Font textFont = legacyFont(11.5f);
+    juce::Font titleFont = legacyFont(15.0f, juce::Font::bold);
     bool isManual = true;
 
     void updateHeight()
@@ -95,23 +96,32 @@ public:
 
     juce::Font getJapaneseFont(float size, int style = juce::Font::plain) const
     {
-        juce::StringArray jaFonts = {
-            "Hiragino Kaku Gothic ProN", "Hiragino Sans",
-            "Yu Gothic", "Meiryo", "MS Gothic",
-            "Noto Sans CJK JP", "Arial Unicode MS"
-        };
-        for (auto& name : jaFonts) {
-            juce::Font f(name, size, style);
-            if (f.getTypefaceName().isNotEmpty() &&
-                f.getTypefaceName() != juce::Font::getDefaultSansSerifFontName())
-                return f;
-        }
-        return juce::Font(size, style);
+        // Resolved once: the first candidate the platform actually provides.
+        // Font::getTypefaceName() echoes the requested name even for a missing
+        // font, so check the name of the typeface it resolves to instead. On
+        // Windows a missing family resolves to some other font; on macOS the
+        // requested name is kept, so the first candidate wins as before.
+        static const juce::String jaTypefaceName = [] {
+            const juce::StringArray candidates = {
+                "Hiragino Kaku Gothic ProN", "Hiragino Sans",
+                "Yu Gothic", "Meiryo", "MS Gothic",
+                "Noto Sans CJK JP", "Arial Unicode MS"
+            };
+            for (const auto& name : candidates) {
+                auto typeface = PsyMelody::legacyFont(name, 13.0f, juce::Font::plain).getTypefacePtr();
+                if (typeface != nullptr && typeface->getName() == name)
+                    return name;
+            }
+            return juce::String();
+        }();
+
+        return jaTypefaceName.isNotEmpty() ? PsyMelody::legacyFont(jaTypefaceName, size, style)
+                                           : PsyMelody::legacyFont(size, style);
     }
 
     juce::Font getFontForLang(float size, int style = juce::Font::plain) const
     {
-        return currentLang == Lang::JA ? getJapaneseFont(size, style) : juce::Font(size, style);
+        return currentLang == Lang::JA ? getJapaneseFont(size, style) : PsyMelody::legacyFont(size, style);
     }
 
     void paint(juce::Graphics& g) override

@@ -64,7 +64,7 @@ private:
     std::mt19937 rng;
 
     std::vector<NoteEvent> generateBar(const BassParams& params, int baseNote,
-                                        int barIndex, const ScaleType& scale)
+                                        int /*barIndex*/, const ScaleType& scale)
     {
         std::vector<NoteEvent> events;
         int style = std::clamp(params.bassStyle, 0, 4);

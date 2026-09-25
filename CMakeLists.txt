@@ -4,7 +4,18 @@ project(PsyMelody VERSION 0.1.2)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(MSVC)
+    # Link the C/C++ runtime statically so the plugin loads on machines
+    # without the Visual C++ Redistributable installed
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../JUCE JUCE)
+
+if(MSVC)
+    # Sources are UTF-8; without this MSVC on non-UTF-8 code pages (e.g. CP932) warns with C4819
+    add_compile_options(/utf-8)
+endif()
 
 juce_add_plugin(PsyMelody
     COMPANY_NAME "EDEN"
@@ -26,6 +37,7 @@ target_sources(PsyMelody PRIVATE
     Source/GoaMelodyGenerator.cpp
     Source/GoaMelodyGenerator.h
     Source/ScaleDefinitions.h
+    Source/FontUtils.h
     Source/MidiPatternEngine.cpp
     Source/MidiPatternEngine.h
     Source/MidiExport.h

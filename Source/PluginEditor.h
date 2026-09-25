@@ -346,7 +346,7 @@ private:
     juce::ComboBox subgenreSelector, genModeSelector;
     juce::ComboBox bassStyleSelector, voicingStyleSelector;
     juce::ComboBox previewWaveSelector;
-    juce::ToggleButton previewToggle{juce::String::charToString(0x25B6) + " PREVIEW"};
+    juce::ToggleButton previewToggle{"PREVIEW"};  // the play triangle is drawn by the LookAndFeel
     juce::Slider previewVolSlider;
     juce::Slider densitySlider, acidSlider, ornamentSlider, graceSlider;
     juce::Slider rhythmVarSlider, pitchRangeSlider, phraseLengthSlider, octaveSlider;
@@ -392,6 +392,10 @@ private:
     void applyTooltips();
     void updateSeedDisplay();
     void showRegenerateMenu();
+    // Shows text on a button for two seconds, then restores restoreText.
+    // Safe if the editor is closed before the delay expires
+    void flashButtonText(juce::Button& button, const juce::String& text,
+                         const juce::String& restoreText);
     void syncFromParams();
     void syncToParams();
     void updatePianoRoll();
