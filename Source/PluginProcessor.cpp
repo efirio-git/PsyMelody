@@ -40,10 +40,10 @@ void PsyMelodyProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     buffer.clear();
     midiMessages.clear();
 
-    auto playHead = getPlayHead();
-    if (playHead == nullptr) return;
+    auto* ph = getPlayHead();
+    if (ph == nullptr) return;
 
-    auto posInfo = playHead->getPosition();
+    auto posInfo = ph->getPosition();
     if (!posInfo.hasValue()) return;
 
     double bpm = fallbackBpm.load();

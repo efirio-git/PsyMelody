@@ -1,15 +1,18 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "BinaryData.h"
+#include "FontUtils.h"
 
 class PsyMelodyLookAndFeel : public juce::LookAndFeel_V4 {
 public:
     // Custom fonts
-    juce::Font titleFont;       // Orbitron Bold - for "PsyMelody"
-    juce::Font sectionFont;     // Orbitron Regular - for section headers
-    juce::Font uiFont;          // Inter Medium - for labels, buttons
-    juce::Font uiFontBold;      // Inter Bold - for emphasis
-    juce::Font uiFontRegular;   // Inter Regular - for values
+    // Initialised with the system-font fallbacks; the constructor swaps in the
+    // embedded typefaces when they load
+    juce::Font titleFont     = PsyMelody::legacyFont(22.0f, juce::Font::bold);  // Orbitron Bold - for "PsyMelody"
+    juce::Font sectionFont   = PsyMelody::legacyFont(10.0f, juce::Font::bold);  // Orbitron Regular - for section headers
+    juce::Font uiFont        = PsyMelody::legacyFont(13.0f);                    // Inter Medium - for labels, buttons
+    juce::Font uiFontBold    = PsyMelody::legacyFont(13.0f, juce::Font::bold);  // Inter Bold - for emphasis
+    juce::Font uiFontRegular = PsyMelody::legacyFont(12.0f);                    // Inter Regular - for values
 
     PsyMelodyLookAndFeel()
     {
@@ -25,20 +28,11 @@ public:
         interBoldTf = juce::Typeface::createSystemTypefaceFor(
             BinaryData::InterBold_ttf, BinaryData::InterBold_ttfSize);
 
-        if (orbitronBoldTf) titleFont = juce::Font(orbitronBoldTf).withHeight(22.0f);
-        else titleFont = juce::Font(22.0f, juce::Font::bold);
-
-        if (orbitronRegTf) sectionFont = juce::Font(orbitronRegTf).withHeight(10.0f);
-        else sectionFont = juce::Font(10.0f, juce::Font::bold);
-
-        if (interMedTf) uiFont = juce::Font(interMedTf).withHeight(13.0f);
-        else uiFont = juce::Font(13.0f);
-
-        if (interBoldTf) uiFontBold = juce::Font(interBoldTf).withHeight(13.0f);
-        else uiFontBold = juce::Font(13.0f, juce::Font::bold);
-
-        if (interRegTf) uiFontRegular = juce::Font(interRegTf).withHeight(12.0f);
-        else uiFontRegular = juce::Font(12.0f);
+        if (orbitronBoldTf) titleFont = PsyMelody::legacyFont(orbitronBoldTf).withHeight(22.0f);
+        if (orbitronRegTf) sectionFont = PsyMelody::legacyFont(orbitronRegTf).withHeight(10.0f);
+        if (interMedTf) uiFont = PsyMelody::legacyFont(interMedTf).withHeight(13.0f);
+        if (interBoldTf) uiFontBold = PsyMelody::legacyFont(interBoldTf).withHeight(13.0f);
+        if (interRegTf) uiFontRegular = PsyMelody::legacyFont(interRegTf).withHeight(12.0f);
 
         if (interRegTf)
             setDefaultSansSerifTypeface(interRegTf);
@@ -66,7 +60,7 @@ public:
     // ============================================================
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                            float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
-                           juce::Slider& slider) override
+                           juce::Slider& /*slider*/) override
     {
         auto bounds = juce::Rectangle<float>((float)x, (float)y, (float)width, (float)height);
         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f - 4.0f;
@@ -158,8 +152,8 @@ public:
                 auto unitPart = fullText.substring(spaceIdx);
                 auto numFont = uiFontBold.withHeight(16.0f);
                 auto unitFont = uiFontRegular.withHeight(11.0f);
-                float numW = numFont.getStringWidthFloat(numPart);
-                float unitW = unitFont.getStringWidthFloat(unitPart);
+                float numW = PsyMelody::advanceWidth(numFont, numPart);
+                float unitW = PsyMelody::advanceWidth(unitFont, unitPart);
                 float startX = bounds.getX() + 6.0f;  // Left-aligned with padding
                 // Number in cyan (large)
                 g.setColour(primary);
@@ -289,7 +283,7 @@ public:
     // Toggle Button
     // ============================================================
     void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button,
-                           bool shouldDrawButtonAsHighlighted, bool /*shouldDrawButtonAsDown*/) override
+                           bool /*shouldDrawButtonAsHighlighted*/, bool /*shouldDrawButtonAsDown*/) override
     {
         auto bounds = button.getLocalBounds().toFloat();
         bool isPreview = button.getComponentID() == "preview_toggle";
@@ -310,8 +304,20 @@ public:
         }
 
         g.setColour(onSurfaceVariant);
+        auto textArea = bounds.withTrimmedLeft(4);
+        if (isPreview) {
+            // Play triangle drawn as a path; the U+25B6 glyph is not in every
+            // platform's fonts (it rendered via macOS font fallback before)
+            // Size and text offset match the glyph it replaces
+            const float w = 9.0f, h = 10.0f, advance = 12.0f;
+            const float left = textArea.getX() + 0.5f, cy = textArea.getCentreY() + 0.5f;
+            juce::Path play;
+            play.addTriangle(left, cy - h * 0.5f, left, cy + h * 0.5f, left + w, cy);
+            g.fillPath(play);
+            textArea.removeFromLeft(advance);
+        }
         g.setFont(uiFont.withHeight(12.0f));
-        g.drawText(button.getButtonText(), bounds.withTrimmedLeft(4), juce::Justification::centredLeft);
+        g.drawText(button.getButtonText(), textArea, juce::Justification::centredLeft);
     }
 
     // ============================================================
@@ -328,7 +334,7 @@ public:
     // ============================================================
     // ScrollBar
     // ============================================================
-    void drawScrollbar(juce::Graphics& g, juce::ScrollBar& scrollbar,
+    void drawScrollbar(juce::Graphics& g, juce::ScrollBar& /*scrollbar*/,
                         int x, int y, int width, int height,
                         bool isScrollbarVertical, int thumbStartPosition, int thumbSize,
                         bool isMouseOver, bool /*isMouseDown*/) override

@@ -3,6 +3,33 @@
 #include <algorithm>
 #include <map>
 
+namespace {
+
+// Writes the phrase to a fresh temp file for an external drag. Each drag gets
+// its own subfolder so a new drag never rewrites a file a host may still be
+// reading (Windows runs the OS drag asynchronously), while the file itself
+// stays "PsyMelody.mid" so the clip name in the DAW is unchanged. Folders from
+// earlier drags are removed after a day, long after any host has read them.
+juce::File writeDragExportFile(const std::vector<PsyMelody::NoteEvent>& phrase, double bpm)
+{
+    auto root = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                    .getChildFile("PsyMelodyDrag");
+
+    const auto staleBefore = juce::Time::getCurrentTime() - juce::RelativeTime::hours(24);
+    for (const auto& dir : root.findChildFiles(juce::File::findDirectories, false))
+        if (dir.getLastModificationTime() < staleBefore)
+            dir.deleteRecursively();
+
+    auto dir = root.getNonexistentChildFile("drag", {}, false);
+    if (!dir.createDirectory()) return {};
+
+    auto file = dir.getChildFile("PsyMelody.mid");
+    if (!PsyMelody::MidiExport::exportToFile(phrase, file, bpm)) return {};
+    return file;
+}
+
+} // namespace
+
 // ============================================================
 // ParamLaneView - Velocity / Pan / Pitch editing
 // ============================================================
@@ -107,7 +134,7 @@ void ParamLaneView::paint(juce::Graphics& g)
 
     // Label
     g.setColour(juce::Colour(0xffacaab1));
-    g.setFont(juce::Font(9.0f));
+    g.setFont(PsyMelody::legacyFont(9.0f));
     juce::String label;
     if (laneType == LaneType::Velocity) label = "VEL";
     else if (laneType == LaneType::Pan) label = "PAN  L|R";
@@ -233,7 +260,7 @@ void PianoRollView::paintOverChildren(juce::Graphics& g)
 
     // H / V labels
     g.setColour(juce::Colour(0xffacaab1).withAlpha(0.6f));
-    g.setFont(juce::Font(8.0f, juce::Font::bold));
+    g.setFont(PsyMelody::legacyFont(8.0f, juce::Font::bold));
     g.drawText("H", zoomOutXBtn.getX() - 11, zoomOutXBtn.getY(), 10, zoomOutXBtn.getHeight(),
                juce::Justification::centred);
     g.drawText("V", zoomOutYBtn.getX() - 11, zoomOutYBtn.getY(), 10, zoomOutYBtn.getHeight(),
@@ -559,7 +586,6 @@ void PianoRollView::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
     g.fillAll(bgColour);
-    int noteRange = std::max(1, highestNote - lowestNote + 1);
     float bw = beatWidth(), nh = noteHeight();
 
     // Draw grid rows
@@ -602,7 +628,7 @@ void PianoRollView::paint(juce::Graphics& g)
     g.drawVerticalLine((int)pianoLabelMargin, 0.0f, bounds.getHeight());
 
     // Note labels on keys
-    g.setFont(juce::Font(9.0f));
+    g.setFont(PsyMelody::legacyFont(9.0f));
     for (int n = lowestNote; n <= highestNote; ++n) {
         float y = yForNote(n);
         if (y > bounds.getHeight() || y + nh < 0) continue;
@@ -619,7 +645,7 @@ void PianoRollView::paint(juce::Graphics& g)
         if (x < -1 || x > bounds.getWidth()+1) continue;
         if (b%4==0) {
             g.setColour(barLineColour.withAlpha(0.3f)); g.drawLine(x,0,x,bounds.getHeight(),1.0f);
-            g.setColour(juce::Colour(0xffacaab1)); g.setFont(juce::Font(9.0f));
+            g.setColour(juce::Colour(0xffacaab1)); g.setFont(PsyMelody::legacyFont(9.0f));
             g.drawText(juce::String(b/4+1),(int)x+2,0,20,12,juce::Justification::centredLeft);
         } else { g.setColour(juce::Colour(0xff48474d).withAlpha(0.10f)); g.drawLine(x,0,x,bounds.getHeight(),0.5f); }
     }
@@ -648,7 +674,7 @@ void PianoRollView::paint(juce::Graphics& g)
         g.fillRect(x,y,w,h);
     }
 
-    float ly = bounds.getHeight()-14; g.setFont(juce::Font(9.0f));
+    float ly = bounds.getHeight()-14; g.setFont(PsyMelody::legacyFont(9.0f));
     auto dl=[&](float lx,juce::Colour c,const juce::String& t){
         g.setColour(c); g.fillRect(lx,ly,8.0f,8.0f);
         g.setColour(juce::Colour(0xffacaab1)); g.drawText(t,(int)lx+10,(int)ly-1,50,12,juce::Justification::centredLeft);
@@ -1248,7 +1274,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     addAndMakeVisible(previewWaveSelector);
 
     previewWaveLabel.setText("OSC", juce::dontSendNotification);
-    previewWaveLabel.setFont(juce::Font(12.0f));
+    previewWaveLabel.setFont(PsyMelody::legacyFont(12.0f));
     previewWaveLabel.setColour(juce::Label::textColourId, juce::Colour(0xffcccccc));
     previewWaveLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(previewWaveLabel);
@@ -1386,7 +1412,12 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             "Export MIDI", juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
                               .getChildFile("PsyMelody.mid"),
             "*.mid");
-        activeFileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles, [this](const juce::FileChooser& fc) {
+        // Created outside the callback: MSVC resolves `this` inside an init-capture
+        // of a nested lambda to the enclosing closure, not the editor
+        juce::Component::SafePointer<PsyMelodyEditor> safeThis(this);
+        activeFileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+                                       [this, safeThis](const juce::FileChooser& fc) {
+            if (safeThis == nullptr) return;
             auto file = fc.getResult();
             if (file != juce::File()) {
                 auto f = file.hasFileExtension(".mid") ? file : file.withFileExtension(".mid");
@@ -1399,10 +1430,8 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 }
                 bool ok = PsyMelody::MidiExport::exportToFile(
                     psyProcessor.getCurrentPhrase(), f, bpm);
-                if (ok) {
-                    exportMidiBtn.setButtonText("EXPORTED!");
-                    juce::Timer::callAfterDelay(2000, [this] { exportMidiBtn.setButtonText("EXPORT MIDI"); });
-                }
+                if (ok)
+                    flashButtonText(exportMidiBtn, "EXPORTED!", "EXPORT MIDI");
             }
         });
     };
@@ -1413,10 +1442,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         if (auto* ph = psyProcessor.getPlayHead())
             if (auto pos = ph->getPosition())
                 if (auto b = pos->getBpm()) bpm = *b;
-        auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                        .getChildFile("PsyMelody.mid");
-        if (!PsyMelody::MidiExport::exportToFile(phrase, file, bpm)) return {};
-        return file;
+        return writeDragExportFile(phrase, bpm);
     };
     addAndMakeVisible(exportMidiBtn);
 
@@ -1443,10 +1469,8 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             }
             bool ok = PsyMelody::MidiExport::exportToFile(
                 psyProcessor.getCurrentPhrase(), file, bpm);
-            if (ok) {
-                copyMidiBtn.setButtonText(file.getFileName());
-                juce::Timer::callAfterDelay(2000, [this] { copyMidiBtn.setButtonText("QUICK SAVE"); });
-            }
+            if (ok)
+                flashButtonText(copyMidiBtn, file.getFileName(), "QUICK SAVE");
         };
 
         if (quickSaveDir.isDirectory()) {
@@ -1455,9 +1479,11 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             activeFileChooser = std::make_shared<juce::FileChooser>(
                 "Select Quick Save Folder",
                 juce::File::getSpecialLocation(juce::File::userDesktopDirectory));
+            juce::Component::SafePointer<PsyMelodyEditor> safeThis(this);
             activeFileChooser->launchAsync(
                 juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-                [this, doSave](const juce::FileChooser& fc) {
+                [safeThis, doSave](const juce::FileChooser& fc) {
+                    if (safeThis == nullptr) return;
                     auto result = fc.getResult();
                     if (result.isDirectory())
                         doSave(result);
@@ -1473,9 +1499,11 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             "Select Quick Save Folder",
             quickSaveDir.isDirectory() ? quickSaveDir
                 : juce::File::getSpecialLocation(juce::File::userDesktopDirectory));
+        juce::Component::SafePointer<PsyMelodyEditor> safeThis(this);
         activeFileChooser->launchAsync(
             juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-            [this](const juce::FileChooser& fc) {
+            [this, safeThis](const juce::FileChooser& fc) {
+                if (safeThis == nullptr) return;
                 auto result = fc.getResult();
                 if (result.isDirectory()) {
                     quickSaveDir = result;
@@ -1497,8 +1525,10 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
         auto flags = juce::FileBrowserComponent::openMode
                    | juce::FileBrowserComponent::canSelectFiles;
 
-        activeFileChooser->launchAsync(flags, [this](const juce::FileChooser& fc)
+        juce::Component::SafePointer<PsyMelodyEditor> safeThis(this);
+        activeFileChooser->launchAsync(flags, [this, safeThis](const juce::FileChooser& fc)
         {
+            if (safeThis == nullptr) return;
             auto file = fc.getResult();
             if (!file.existsAsFile()) {
                 importMidiBtn.setButtonText("IMPORT MIDI");
@@ -1510,8 +1540,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             // Read file via JUCE File API
             auto inputStream = file.createInputStream();
             if (inputStream == nullptr) {
-                importMidiBtn.setButtonText("OPEN FAILED");
-                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
+                flashButtonText(importMidiBtn, "OPEN FAILED", "IMPORT MIDI");
                 return;
             }
 
@@ -1519,53 +1548,11 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
             midiFile.readFrom(*inputStream);
 
             if (midiFile.getNumTracks() == 0) {
-                importMidiBtn.setButtonText("NO TRACKS");
-                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
+                flashButtonText(importMidiBtn, "NO TRACKS", "IMPORT MIDI");
                 return;
             }
 
-            std::vector<PsyMelody::NoteEvent> imported;
-            int ticksPerBeat = midiFile.getTimeFormat();
-            if (ticksPerBeat <= 0) ticksPerBeat = 480;
-
-            for (int track = 0; track < midiFile.getNumTracks(); ++track) {
-                const auto* seq = midiFile.getTrack(track);
-                if (!seq) continue;
-
-                struct NoteStart { double tick; float velocity; };
-                std::map<int, NoteStart> activeNotes;
-                float currentPan = 0.0f;
-                int currentPitchBend = 0;
-
-                for (int i = 0; i < seq->getNumEvents(); ++i) {
-                    const auto& evt = seq->getEventPointer(i)->message;
-
-                    if (evt.isController() && evt.getControllerNumber() == 10)
-                        currentPan = (evt.getControllerValue() - 64) / 64.0f;
-                    else if (evt.isPitchWheel())
-                        currentPitchBend = evt.getPitchWheelValue() - 8192;
-                    else if (evt.isNoteOn() && evt.getVelocity() > 0)
-                        activeNotes[evt.getNoteNumber()] = {evt.getTimeStamp(), evt.getFloatVelocity()};
-                    else if (evt.isNoteOff() || (evt.isNoteOn() && evt.getVelocity() == 0)) {
-                        auto it = activeNotes.find(evt.getNoteNumber());
-                        if (it != activeNotes.end()) {
-                            PsyMelody::NoteEvent note;
-                            note.noteNumber = evt.getNoteNumber();
-                            note.velocity = it->second.velocity;
-                            note.pan = currentPan;
-                            note.startBeat = it->second.tick / ticksPerBeat;
-                            note.duration = (evt.getTimeStamp() - it->second.tick) / ticksPerBeat;
-                            if (note.duration < 0.01) note.duration = 0.25;
-                            note.pitchBend = currentPitchBend;
-                            note.accent = false;
-                            note.slide = false;
-                            note.isGraceNote = false;
-                            imported.push_back(note);
-                            activeNotes.erase(it);
-                        }
-                    }
-                }
-            }
+            auto imported = PsyMelody::MidiExport::importFromMidiFile(midiFile);
 
             if (!imported.empty()) {
                 psyProcessor.updatePhrase(imported);
@@ -1576,11 +1563,9 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
                 psyProcessor.getGeneratorParams().phraseLengthBars = std::min(bars, 16);
                 syncFromParams();
                 updatePianoRoll();
-                importMidiBtn.setButtonText(juce::String((int)imported.size()) + " NOTES");
-                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
+                flashButtonText(importMidiBtn, juce::String((int)imported.size()) + " NOTES", "IMPORT MIDI");
             } else {
-                importMidiBtn.setButtonText("NO NOTES");
-                juce::Timer::callAfterDelay(2000, [this] { importMidiBtn.setButtonText("IMPORT MIDI"); });
+                flashButtonText(importMidiBtn, "NO NOTES", "IMPORT MIDI");
             }
         });
     };
@@ -1688,7 +1673,10 @@ void PsyMelodyEditor::saveUserPreset()
     dialog->addButton("Cancel", 0);
 
     dialog->enterModalState(true, juce::ModalCallbackFunction::create(
-        [this, dialog](int result) {
+        [this, safeThis = juce::Component::SafePointer<PsyMelodyEditor>(this), dialog](int result) {
+            // The dialog is a separate window and can outlive the editor; it is
+            // still auto-deleted on dismissal, so only the editor needs a guard
+            if (safeThis == nullptr) return;
             if (result == 1) {
                 auto name = dialog->getTextEditorContents("name").toStdString();
                 if (!name.empty()) {
@@ -1773,6 +1761,17 @@ void PsyMelodyEditor::updateSeedDisplay()
     seedLockBtn.setToggleState(psyProcessor.isSeedLocked(), juce::dontSendNotification);
 }
 
+void PsyMelodyEditor::flashButtonText(juce::Button& button, const juce::String& text,
+                                      const juce::String& restoreText)
+{
+    button.setButtonText(text);
+    juce::Timer::callAfterDelay(2000, [safeButton = juce::Component::SafePointer<juce::Button>(&button),
+                                       restoreText] {
+        if (safeButton != nullptr)
+            safeButton->setButtonText(restoreText);
+    });
+}
+
 void PsyMelodyEditor::showRegenerateMenu()
 {
     bool melodyMode = (psyProcessor.getGenMode() == PsyMelodyProcessor::GenMode::Melody);
@@ -1784,8 +1783,8 @@ void PsyMelodyEditor::showRegenerateMenu()
 
     menu.showMenuAsync(
         juce::PopupMenu::Options().withTargetComponent(&generateButton),
-        [this](int result) {
-            if (result == 0) return;
+        [this, safeThis = juce::Component::SafePointer<PsyMelodyEditor>(this)](int result) {
+            if (result == 0 || safeThis == nullptr) return;
             syncToParams();
             pianoRoll.clearSelection();
             if (result == 1)
@@ -2149,8 +2148,8 @@ void PsyMelodyEditor::paintOverChildren(juce::Graphics& g)
     if (previewVolLabel.isVisible())
     {
         auto lb = previewVolLabel.getBounds();
-        float cx = lb.getCentreX();
-        float cy = lb.getCentreY();
+        float cx = (float)lb.getCentreX();
+        float cy = (float)lb.getCentreY();
         g.setColour(psyLnf.onSurfaceVariant.withAlpha(0.8f));
         // Speaker body
         juce::Path speaker;
@@ -2176,7 +2175,9 @@ void PsyMelodyEditor::paintOverChildren(juce::Graphics& g)
         drawArc(8.0f);
     }
 
-    // ---- Undo/Redo icons (Unicode characters) ----
+    // ---- Undo/Redo icons ----
+    // Drawn as paths rather than glyphs: the anticlockwise / clockwise gapped
+    // circle arrows (U+27F2 / U+27F3) only exist in macOS fonts
     {
         auto drawIcon = [&](juce::TextButton& btn, bool isUndo) {
             auto b = btn.getBounds();
@@ -2184,13 +2185,34 @@ void PsyMelodyEditor::paintOverChildren(juce::Graphics& g)
             g.setColour(hover ? psyLnf.primary : psyLnf.onSurfaceVariant.withAlpha(0.45f));
             int cx = b.getCentreX();
             int iconY = b.getY() + 4;
-            auto iconRect = juce::Rectangle<int>(cx - 20, iconY, 40, 32);
-            g.setFont(juce::Font("Apple Symbols", 32.0f, juce::Font::plain));
-            g.drawText(isUndo ? juce::String::charToString(0x27F2)    // ⟲
-                              : juce::String::charToString(0x27F3),   // ⟳
-                       iconRect, juce::Justification::centred);
+
+            // Circle with a gap on the left (undo) or right (redo); the arrowhead
+            // sits at the upper end of the gap, pointing into it
+            constexpr float pi = juce::MathConstants<float>::pi;
+            const float radius = 8.0f, thickness = 2.3f;
+            const juce::Point<float> centre((float)cx, (float)iconY + 13.0f);
+            const float headAngle = isUndo ? -pi * 0.25f : pi * 0.25f;   // 10:30 / 1:30
+            const float span = pi * 1.55f;
+            juce::Path arc;
+            arc.addCentredArc(centre.x, centre.y, radius, radius, 0.0f,
+                              isUndo ? headAngle : headAngle - span,
+                              isUndo ? headAngle + span : headAngle, true);
+            g.strokePath(arc, juce::PathStrokeType(thickness));
+
+            // Angles run clockwise from 12 o'clock, so the clockwise tangent is
+            // (cos, sin); undo travels the other way
+            const juce::Point<float> tip = centre.getPointOnCircumference(radius, headAngle);
+            const float dir = isUndo ? -1.0f : 1.0f;
+            const juce::Point<float> tangent(dir * std::cos(headAngle), dir * std::sin(headAngle));
+            const juce::Point<float> normal(-tangent.y, tangent.x);
+            juce::Path head;
+            head.addTriangle(tip + tangent * (thickness * 2.2f),
+                             tip - normal * (thickness * 1.9f),
+                             tip + normal * (thickness * 1.9f));
+            g.fillPath(head);
+
             auto labelRect = juce::Rectangle<int>(cx - 20, iconY + 30, 40, 12);
-            g.setFont(juce::Font(9.0f));
+            g.setFont(PsyMelody::legacyFont(9.0f));
             g.drawText(isUndo ? "UNDO" : "REDO",
                        labelRect, juce::Justification::centredTop);
         };
@@ -2442,7 +2464,6 @@ void PsyMelodyEditor::resized()
     footer.removeFromTop(4);
 
     // Footer layout: all buttons uniform height, grouped by function
-    int btnH = footerH - 8;
     int btnY = 2;
 
     // Group 1: Generate (large) + Variation

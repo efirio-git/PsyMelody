@@ -315,7 +315,7 @@ std::vector<double> GoaMelodyGenerator::generateRhythm(const GeneratorParams& pa
 // Choose next note - now chord-aware
 // ============================================================
 int GoaMelodyGenerator::chooseNextNote(int currentNote, const GeneratorParams& params,
-                                        const std::vector<int>& scaleNotes,
+                                        const std::vector<int>& /*scaleNotes*/,
                                         const ChordInfo& currentChord)
 {
     const auto& intervals = getSubgenreIntervalWeights(params.subgenre);
@@ -553,7 +553,6 @@ std::vector<NoteEvent> GoaMelodyGenerator::generateMotif(
 
         // Musical velocity based on beat position
         double beatInBar = std::fmod(onsets[i], 4.0);
-        double step16th = std::fmod(onsets[i], 0.25);
         bool isDownbeat = std::abs(beatInBar) < 0.01;
         bool isBeat3 = std::abs(beatInBar - 2.0) < 0.01;
         bool isOnBeat = std::abs(std::fmod(beatInBar, 1.0)) < 0.01;
