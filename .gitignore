@@ -29,3 +29,7 @@ Resources/section_line.png
 
 # Extracted system fonts (not needed)
 Resources/Fonts/Avenir_Next_*
+
+# Internal development records (kept locally, not published)
+docs/design/
+tasks/
