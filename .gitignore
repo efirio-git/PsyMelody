@@ -8,6 +8,7 @@ Package/
 installer/
 *.dmg
 *.pkg
+*.zip
 
 # IDE files
 .vscode/
@@ -33,3 +34,6 @@ Resources/Fonts/Avenir_Next_*
 # Internal development records (kept locally, not published)
 docs/design/
 tasks/
+
+# Local repository backups
+*.bundle
