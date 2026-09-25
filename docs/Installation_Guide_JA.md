@@ -5,7 +5,9 @@
 
 ## インストール
 
-### インストーラーを使用（推奨）
+### macOS
+
+#### インストーラーを使用（推奨）
 
 1. `PsyMelody_v0.1.3.dmg` を開く
 2. `PsyMelody_Installer.pkg` をダブルクリック
@@ -16,11 +18,11 @@
 5. インストールをクリック
 6. DAWを再起動
 
-### アンインストール
+#### アンインストール
 
 DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 
-### 手動インストール
+#### 手動インストール
 
 以下の場所にファイルをコピー:
 
@@ -28,6 +30,39 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 |------------|---------|
 | **PsyMelody.vst3** | `/Library/Audio/Plug-Ins/VST3/` |
 | **PsyMelody.component** | `/Library/Audio/Plug-Ins/Components/` |
+
+### Windows
+
+**動作環境:** Windows 10 / 11（64 ビット）、VST3 対応の DAW（FL Studio、Ableton Live、Cubase、
+Studio One、Bitwig、REAPER など）。Windows 版は VST3 のみで、Standalone アプリは含まれません。
+
+#### インストーラーを使用（推奨）
+
+1. `PsyMelody_v0.1.3_Windows.zip` を右クリックして **すべて展開** を選ぶ
+2. 展開したフォルダの `Install_PsyMelody.bat` をダブルクリック
+3. 管理者権限の確認が出たら「はい」を選ぶ
+4. DAW を再起動し、プラグインを再スキャンする
+
+インストール先: 64 ビット用の共通ファイルの VST3 フォルダ（通常は `C:\Program Files\Common Files\VST3\PsyMelody.vst3`）
+
+#### 手動インストール
+
+`PsyMelody.vst3` フォルダを `C:\Program Files\Common Files\VST3\` にコピーしてください。
+
+#### セキュリティの警告について
+
+Windows 版にはコード署名がありません。`Install_PsyMelody.bat` を実行すると「発行元を確認できま
+せんでした」や「Windows によって PC が保護されました」と表示されることがあります。「実行」
+（または「詳細情報」→「実行」）を選ぶと続行できます。ダウンロードしたファイルが改ざんされて
+いないかは、GitHub のリリースページに載せている SHA256 と比べて確認できます
+（PowerShell: `Get-FileHash <zip ファイル>`）。
+
+#### アンインストール
+
+`Uninstall_PsyMelody.bat` をダブルクリックします。プラグインの削除を確認します。プラグインを削除でき、
+`Documents\EDEN\PsyMelody` がある場合は、プリセットとデータも削除するかを別に尋ねられます。
+ドキュメントフォルダが OneDrive 上にある場合（例: `C:\Users\<user>\OneDrive\ドキュメント`）、空になった
+`Documents\EDEN` フォルダが残ることがありますが、問題はありません。
 
 ---
 
@@ -63,6 +98,10 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 4. パターンをお好みのシンセにルーティング
 5. PsyMelodyを閉じてCPUリソースを節約
 
+#### Windows
+インストール後は上記と同じく **Options** > **Manage plugins** で再スキャンしてください。動作は
+macOSと同じです（Windows 11のFL Studioで、高DPI表示スケーリングを含めて確認済み）。
+
 ---
 
 ### Ableton Live
@@ -91,12 +130,16 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 3. `.mid` を空のMIDIクリップスロットにドラッグ
 4. お好みのシンセにルーティング
 
+#### Windows
+プラグインスキャンと設定手順は上記と同じです: **環境設定** > **Plug-Ins** で
+**Use VST3 Plug-In System Folder** を有効にし、**Rescan** してください。
+
 ---
 
-### Logic Pro
+### Logic Pro（macOSのみ）
 
 > **注意:** Logic Proは **Audio Unit (AU)** フォーマットを使用します（VST3は非対応）。
-> PsyMelody.componentがインストールされていることを確認してください。
+> Windowsでは利用できません。PsyMelody.componentがインストールされていることを確認してください。
 
 #### プラグインスキャン
 1. Logic Proを開く
@@ -167,6 +210,18 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 
 ---
 
+### Windows（Cubase / Studio One / Bitwig Studio / REAPER）
+
+Windowsでは、これらのDAWは標準でVST3システムフォルダ
+（`C:\Program Files\Common Files\VST3\`）をスキャンするため、パスの追加設定は不要です。
+インストール後は再スキャンするだけです:
+- **Cubase:** **スタジオ** > **VSTプラグインマネージャ** > **すべてを再スキャン**
+- **Studio One:** **Studio One** > **オプション** > **ロケーション** > **VSTプラグイン** > **再スキャン**
+- **Bitwig Studio:** **設定** > **プラグイン** > **ロケーション** > **再スキャン**
+- **REAPER:** **Options** > **Preferences** > **Plug-ins** > **VST** > **Re-scan**
+
+---
+
 ## プレビューシンセ
 
 外部シンセなしでメロディを試聴できる内蔵シンセ:
@@ -187,12 +242,22 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 - DAWを再起動する
 - DAWのプラグインマネージャで再スキャンする
 - ファイルが正しいフォルダにあるか確認:
-  - VST3: `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3`
-  - AU: `/Library/Audio/Plug-Ins/Components/PsyMelody.component`
+  - macOS VST3: `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3`
+  - macOS AU: `/Library/Audio/Plug-Ins/Components/PsyMelody.component`
+  - Windows VST3: `C:\Program Files\Common Files\VST3\PsyMelody.vst3`
 
 ### macOSで「開発元を確認できません」の警告が出る
 - プラグインファイルを右クリック > **開く**
 - または: **システム設定** > **プライバシーとセキュリティ** > **このまま開く** をクリック
+
+### Windowsで「発行元を確認できません」/ SmartScreenの警告が出る
+- Windows版にはコード署名がないため、正常な表示です
+- 「実行」（または「詳細情報」→「実行」）を選んで続行してください
+- ダウンロードのSHA256をGitHubリリースページの値と照合して確認できます
+
+### インストーラーが「プラグインを置き換えられませんでした」と表示する（Windows）
+- DAWが起動していて、プラグインが使用中のため置き換えられません
+- DAWを完全に終了してから、`Install_PsyMelody.bat` を再度実行してください
 
 ### FL Studioで「error」と表示される
 1. FL Studioを終了
@@ -216,10 +281,16 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 
 ## システム要件
 
+### macOS
 - **OS:** macOS 10.15 (Catalina) 以降
 - **アーキテクチャ:** Apple Silicon または Intel（Universal Binary）
 - **フォーマット:** VST3, Audio Unit
 - **DAW:** VST3またはAU対応の任意のDAW
+
+### Windows
+- **OS:** Windows 10 / 11（64ビット）
+- **フォーマット:** VST3のみ（AU、Standaloneはなし）
+- **DAW:** VST3対応の任意のDAW
 
 ---
 
@@ -227,9 +298,11 @@ DMGに含まれる `Uninstall_PsyMelody.command` を実行してください。
 
 | 項目 | パス |
 |------|------|
-| VST3プラグイン | `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3` |
-| AUプラグイン | `/Library/Audio/Plug-Ins/Components/PsyMelody.component` |
-| ユーザープリセット | `~/Documents/EDEN/PsyMelody/Presets/` |
+| macOS VST3プラグイン | `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3` |
+| macOS AUプラグイン | `/Library/Audio/Plug-Ins/Components/PsyMelody.component` |
+| macOS ユーザープリセット | `~/Documents/EDEN/PsyMelody/Presets/` |
+| Windows VST3プラグイン | `C:\Program Files\Common Files\VST3\PsyMelody.vst3` |
+| Windows ユーザープリセット | `Documents\EDEN\PsyMelody\Presets\`（ドキュメントフォルダ。OneDriveにリダイレクトされている場合あり） |
 
 ---
 

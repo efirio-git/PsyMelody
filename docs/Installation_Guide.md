@@ -5,7 +5,9 @@
 
 ## Installation
 
-### Using the Installer (Recommended)
+### macOS
+
+#### Using the Installer (Recommended)
 
 1. Open `PsyMelody_v0.1.3.dmg`
 2. Double-click `PsyMelody_Installer.pkg`
@@ -16,11 +18,11 @@
 5. Click Install
 6. Restart your DAW
 
-### Uninstalling
+#### Uninstalling
 
 Run `Uninstall_PsyMelody.command` included in the DMG.
 
-### Manual Installation
+#### Manual Installation
 
 Copy the plugin files to the following locations:
 
@@ -28,6 +30,41 @@ Copy the plugin files to the following locations:
 |--------|---------|
 | **PsyMelody.vst3** | `/Library/Audio/Plug-Ins/VST3/` |
 | **PsyMelody.component** | `/Library/Audio/Plug-Ins/Components/` |
+
+### Windows
+
+**Requirements:** Windows 10 / 11 (64-bit) and a VST3 host (FL Studio, Ableton Live, Cubase,
+Studio One, Bitwig, REAPER, ...). The Windows build is VST3 only; the Standalone application is
+not included on Windows.
+
+#### Using the Installer (Recommended)
+
+1. Right-click `PsyMelody_v0.1.3_Windows.zip` and choose **Extract All**
+2. In the extracted folder, double-click `Install_PsyMelody.bat`
+3. Allow administrator permission when Windows asks
+4. Restart your DAW and rescan plugins
+
+The plugin is installed to the 64-bit Common Files VST3 folder, normally `C:\Program Files\Common Files\VST3\PsyMelody.vst3`.
+
+#### Manual Installation
+
+Copy the `PsyMelody.vst3` folder into `C:\Program Files\Common Files\VST3\`.
+
+#### Security Warning
+
+The Windows build is not code-signed. When you run `Install_PsyMelody.bat`, Windows may show
+"The publisher could not be verified" or SmartScreen's "Windows protected your PC". Click **Run**
+(or **More info** > **Run anyway**) to continue. You can verify the download was not altered by
+comparing its SHA256 with the value published on the GitHub release page
+(PowerShell: `Get-FileHash <zip file>`).
+
+#### Uninstalling
+
+Double-click `Uninstall_PsyMelody.bat`. You will be asked to confirm removal of the plugin. Once
+the plugin has been removed, and if `Documents\EDEN\PsyMelody` exists, you are asked separately
+whether to also remove your presets and data. If your Documents folder is on OneDrive (e.g.
+`C:\Users\<user>\OneDrive\Documents`), an empty `Documents\EDEN` folder may be left behind;
+this is harmless.
 
 ---
 
@@ -63,6 +100,10 @@ Copy the plugin files to the following locations:
 4. Route the pattern to your preferred synth
 5. Close PsyMelody to save CPU resources
 
+#### Windows
+After installing, rescan in **Options** > **Manage plugins** as above. PsyMelody loads and works
+the same as on macOS (verified in FL Studio on Windows 11, including high-DPI display scaling).
+
 ---
 
 ### Ableton Live
@@ -91,11 +132,15 @@ Copy the plugin files to the following locations:
 3. Drag `.mid` into an empty MIDI clip slot
 4. Route to your preferred synth
 
+#### Windows
+Plugin scan and setup are the same as above: **Preferences** > **Plug-Ins**, enable **Use VST3
+Plug-In System Folder**, then **Rescan**.
+
 ---
 
-### Logic Pro
+### Logic Pro (macOS only)
 
-> **Note:** Logic Pro uses **Audio Unit (AU)** format, not VST3.
+> **Note:** Logic Pro uses **Audio Unit (AU)** format, not VST3, and is not available on Windows.
 > Make sure PsyMelody.component is installed.
 
 #### Plugin Scan
@@ -179,6 +224,18 @@ Copy the plugin files to the following locations:
 
 ---
 
+### Windows (Cubase / Studio One / Bitwig Studio / REAPER)
+
+On Windows, these DAWs scan the VST3 system folder
+(`C:\Program Files\Common Files\VST3\`) by default, so no extra path configuration is needed.
+Just rescan plugins after installing:
+- **Cubase:** **Studio** > **VST Plug-in Manager** > **Rescan All**
+- **Studio One:** **Studio One** > **Options** > **Locations** > **VST Plug-Ins** > **Rescan**
+- **Bitwig Studio:** **Settings** > **Plug-ins** > **Locations** > **Rescan**
+- **REAPER:** **Options** > **Preferences** > **Plug-ins** > **VST** > **Re-scan**
+
+---
+
 ## Preview Synth
 
 PsyMelody includes a built-in preview synthesizer so you can hear melodies without an external synth:
@@ -199,12 +256,22 @@ PsyMelody includes a built-in preview synthesizer so you can hear melodies witho
 - Restart your DAW
 - Rescan plugins in your DAW's plugin manager
 - Check that the file is in the correct folder:
-  - VST3: `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3`
-  - AU: `/Library/Audio/Plug-Ins/Components/PsyMelody.component`
+  - macOS VST3: `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3`
+  - macOS AU: `/Library/Audio/Plug-Ins/Components/PsyMelody.component`
+  - Windows VST3: `C:\Program Files\Common Files\VST3\PsyMelody.vst3`
 
 ### "Developer cannot be verified" warning on macOS
 - Right-click the plugin file > **Open**
 - Or: **System Settings** > **Privacy & Security** > Click **Open Anyway**
+
+### "Publisher could not be verified" / SmartScreen warning on Windows
+- This is expected: the Windows build is not code-signed
+- Click **Run** (or **More info** > **Run anyway**) to proceed
+- You can verify the download's SHA256 against the value on the GitHub release page
+
+### Installer says it could not replace the plugin (Windows)
+- The plugin is currently loaded by a running DAW and cannot be overwritten
+- Close your DAW completely, then run `Install_PsyMelody.bat` again
 
 ### Plugin shows as "error" in FL Studio
 1. Close FL Studio
@@ -228,10 +295,16 @@ PsyMelody includes a built-in preview synthesizer so you can hear melodies witho
 
 ## System Requirements
 
+### macOS
 - **OS:** macOS 10.15 (Catalina) or later
 - **Architecture:** Apple Silicon or Intel (Universal Binary)
 - **Formats:** VST3, Audio Unit
 - **DAW:** Any VST3 or AU compatible DAW
+
+### Windows
+- **OS:** Windows 10 / 11, 64-bit
+- **Formats:** VST3 only (no AU, no Standalone)
+- **DAW:** Any VST3 compatible DAW
 
 ---
 
@@ -239,9 +312,11 @@ PsyMelody includes a built-in preview synthesizer so you can hear melodies witho
 
 | Item | Path |
 |------|------|
-| VST3 Plugin | `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3` |
-| AU Plugin | `/Library/Audio/Plug-Ins/Components/PsyMelody.component` |
-| User Presets | `~/Documents/EDEN/PsyMelody/Presets/` |
+| macOS VST3 Plugin | `/Library/Audio/Plug-Ins/VST3/PsyMelody.vst3` |
+| macOS AU Plugin | `/Library/Audio/Plug-Ins/Components/PsyMelody.component` |
+| macOS User Presets | `~/Documents/EDEN/PsyMelody/Presets/` |
+| Windows VST3 Plugin | `C:\Program Files\Common Files\VST3\PsyMelody.vst3` |
+| Windows User Presets | `Documents\EDEN\PsyMelody\Presets\` (your Documents folder; may be redirected to OneDrive) |
 
 ---
 
