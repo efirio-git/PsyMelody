@@ -1,7 +1,7 @@
 # PsyMelody 仕様書
 
-対象バージョン: v0.1.2 開発版（v0.1.1 + D&Dエクスポート / ツールチップ / 生成エンジン強化）
-最終更新: 2026-08-07
+対象バージョン: v0.1.3（Windows 対応 + 不具合修正）
+最終更新: 2026-09-25
 
 ---
 
@@ -13,7 +13,7 @@ MIDI メロディ／ベースライン／コードボイシング生成プラグ
 | 項目 | 内容 |
 |---|---|
 | フレームワーク | JUCE（C++17、CMake 3.22+） |
-| フォーマット | Standalone / VST3 / AU |
+| フォーマット | macOS: Standalone / VST3 / AU（配布は全フォーマット）。Windows 10/11 x64: VST3 のみを配布（Standalone はビルドされるが未配布・トランスポート非対応で無音のため。§9 参照） |
 | プラグイン種別 | `IS_SYNTH=TRUE`、MIDI 出力あり（`producesMidi`）、MIDI 入力なし |
 | バス構成 | ステレオ出力のみ（入力なし） |
 | 開発元 | EDEN（manufacturer code `PsyM` / plugin code `PsMl`） |
@@ -75,6 +75,12 @@ MidiPatternEngine（PPQ 同期ループ再生）──► MIDI 出力（DAW へ�
 - `loadPhrase()` は鳴動中ノートを直接クリアせず `flushActiveNotes` フラグを立て、
   次のオーディオブロック冒頭で note-off（+ ベンドリセット）を送出してからクリアする
   （DAW にノートオンが取り残されない）。
+- **トランスポートジャンプ対応**: `MidiPatternEngine` は次ブロックの開始位置を
+  `expectedNextBeat`（`MidiPatternEngine.h:52-54`）として保持し、実際の開始位置がそこから
+  `jumpToleranceBeats`（0.01 拍）を超えてずれたら鳴動中ノート全てに note-off を送ってから
+  スキャンする（`MidiPatternEngine.cpp:77-86`）。DAW のループがフレーズより短い場合
+  （例: 4 小節フレーズに 2 小節ループ）に音が鳴りっぱなしになる不具合の修正。連続再生時の
+  出力イベント列は変化しない。
 - `PreviewSynth::allNotesOff()` は `killRequested` フラグのセットのみ。ボイスのゼロ化は
   オーディオスレッドが次ブロックで行う。
 - `activeNotes` はコンストラクタで 128 要素 reserve 済み（オーディオスレッドでの再確保回避）。
@@ -277,18 +283,42 @@ Progressive(4)。パラメータのみを持ち、ロード時に新規生成が
 - `MidiExport::exportToFile`: ticksPerBeat=480、テンポ + 拍子（4/4）メタイベント付き、
   単一トラック SMF。DAW BPM 検出時はそちらを優先。
 - ピッチベンドはノート前送出 + ノート後リセット。**CC10 パンも on-change で書き出す。**
+- **上書きは in-place**: MIDI を `MemoryOutputStream` にシリアライズしてから対象ファイルを開き、
+  `setPosition(0)` + `truncate()` してから書き込む（`MidiExport.h:90-106`）。既存 `.mid` を選んで
+  上書きしても追記・破損しない。リネーム方式（一時ファイル→差し替え）ではなくその場書き込みを
+  採用しているのは、リネーム方式だと macOS のファイル選択パネルで直後に開き直すまで対象ファイルが
+  グレー表示になっていたため。ファイルの identity・パーミッションは保持される。
 - EXPORT MIDI ボタン（分割ボタン）: 左クリック → FileChooser（デフォルト `~/Desktop/PsyMelody.mid`）。
   **右端グリップ（⁙）をドラッグ → 一時 .mid を生成してOSファイルドラッグ開始**、DAWへ直接
-  ドロップできる。FL Studio ではピアノロール / チャンネルラックへのドロップに対応
+  ドロップできる。**一時ファイルはドラッグごとに専用サブフォルダ**
+  `<temp>/PsyMelodyDrag/dragN/PsyMelody.mid` に書き出され（`PluginEditor.cpp:13-31`
+  `writeDragExportFile`）、クリップ名は常に "PsyMelody" になる。24 時間より古いサブフォルダは
+  次回ドラッグ時に削除される。Windows は OS のドラッグを非同期に実行するため、ドラッグごとに
+  別ファイルにする必要がある（同一ファイルへの書き直しだとホストが読み取り中に上書きされうる）。
+  FL Studio ではピアノロール / チャンネルラックへのドロップに対応
   （プレイリストは FL 側の制約で不可。また FL のインポートはノート+ベロシティのみで
   CC10 / ピッチホイールは取り込まれない）。
 - QUICK SAVE: 初回のみフォルダ選択、以降ワンクリック保存。`PsyMelody.mid` →
   `PsyMelody_1.mid` … と自動採番（上書きなし）。`[...]` でフォルダ変更。
+- **アーティキュレーション往復（round-trip）**: accent / slide / grace の 3 フラグは MIDI に
+  直接対応する表現がないため、tick 0 の 1 個のシーケンサ固有メタイベント（`FF 7F`）に埋め込んで
+  書き出す（`MidiExport.h:111-230`）。ペイロードは ASCII で `}PSYM1;` に続けて
+  `<tick>,<note>,<flags>;` を列挙する形式（`0x7D` = 非商用メーカー ID、`flags` は
+  1=accent / 2=slide / 4=grace のビットマスク、`tick = round(startBeat × 480)` は MidiFile が
+  実際に書き込む tick と一致させてある）。フラグ付きノートのみ列挙するが、同じ
+  (tick, note) を複数ノートが共有する場合はそのキーの全ノートを順序通り列挙する。
+  どのノートにもフラグが立っていない場合はイベント自体を書き出さない。JUCE の
+  `textMetaEvent` はタイプ 1〜15 しか受け付けないため、バイト列は手組みで構築している。
+  他ソフトウェアは `FF 7F` イベントを無視することを macOS の DAW で確認済み。
 
 ### 6.3 MIDI インポート
 
 `*.mid;*.midi` を全トラック走査。note-on/off ペアリング（duration < 0.01 拍は 0.25 に補正）、
 CC10 → `pan`、pitch wheel → `pitchBend` を取り込み。小節数は自動算出（最大 16 にクランプ）。
+インポート処理はエディタから `MidiExport::importFromMidiFile`（`MidiExport.h:207`）へ移動した。
+上記 §6.2 のアーティキュレーションメタイベントが存在すれば accent / slide / grace を復元する。
+イベントを持たないファイル（他ソフトウェア書き出し、旧バージョンの PsyMelody 書き出し）は
+従来どおり全フラグ OFF でインポートされる。
 
 ## 7. UI 仕様
 
@@ -302,7 +332,17 @@ ORNAMENT / GRACE / RHYTHM / PITCH RNG / HUMANIZE / SWING）+ サブジャンル�
 （GENERATE（分割ボタン、▾で部分再生成メニュー）/ VARIATION / EXPORT（分割ボタン、
 グリップでD&D）/ IMPORT / PREVIEW 系 / QUICK SAVE）。
 
-**ツールチップ**: 全コントロールに搭載。言語設定（英/日）に連動して切り替わる。
+**ツールチップ**: 全コントロールに搭載。言語設定（英/日）に連動して切り替わる。GENERATE の
+ツールチップとマニュアル本文（英/日）にあった ▾ 記号は、Windows で表示崩れしないよう
+語句表現（"Right-edge arrow" / "The arrow at the right edge of GENERATE" / "右端の矢印"）に
+置き換えた（`Source/Localization.h:202`、`148`）。
+
+**UI シンボル**: UNDO/REDO アイコンと PREVIEW の再生三角は、macOS 専用フォント
+（"Apple Symbols" の U+27F2/U+27F3、ボタン文字内の U+25B6）に依存していたため Windows では
+表示できなかった。現在はすべてパス描画に置き換えている
+（UNDO/REDO: `Source/PluginEditor.cpp:2178-2200`、PREVIEW 三角: `Source/PsyMelodyLookAndFeel.h:285-320`。
+`previewToggle` のボタン文字は "PREVIEW" のみ、`Source/PluginEditor.h:349`）。macOS 上の見た目は
+ピクセル単位でほぼ同一（旧アイコン相当の 2 箇所を除き 1px 以内で一致）。
 
 デザインは "Neon Architect"（`PsyMelodyLookAndFeel`）: surface `#0e0e13`、
 primary シアン `#81ecff`、secondary マゼンタ `#ff59e3`、tertiary パープル `#ba84ff`、
@@ -348,6 +388,19 @@ Velocity（0.05–1.0）/ Pan（−1〜1）/ Pitch（±8192）をクリック / 
   QUICK SAVE ボタンに適用。メイン画面のパラメータ名は意図的に英語のまま）。
 - Manual / About タブ（スクロール可能）。日本語表示にはシステムの日本語フォントを
   自動探索（Hiragino → Yu Gothic → Meiryo → Noto Sans CJK 等）。
+- **日本語フォント選択の修正**: `SettingsPage::getJapaneseFont`（`SettingsPage.h:97-120`）は、
+  `Font::getTypefaceName` が要求名をそのまま返す仕様のため、実際には存在しない環境でも
+  常に先頭候補 "Hiragino Kaku Gothic ProN" を選んでいた。解決後のタイプフェース名が要求名と
+  一致する最初の候補を選ぶよう修正（結果は初回だけキャッシュ）。候補の順は Hiragino Kaku Gothic ProN →
+  Hiragino Sans → Yu Gothic → Meiryo → MS Gothic → Noto Sans CJK JP → Arial Unicode MS で、OS による分岐はない。
+  通常は macOS で Hiragino、Windows で Yu Gothic になる。
+- **フォント基盤**: JUCE 8 で非推奨になった `Font` コンストラクタは、新設ヘッダ
+  `Source/FontUtils.h` の `PsyMelody::makeFont()`（`FontOptions` + portable メトリクスを使用）に
+  置き換えた。`getStringWidthFloat` も同等の計算をする `PsyMelody::advanceWidth()` に置換。
+  旧（legacy）メトリクスは Windows 上で Inter・Yu Gothic を macOS より約 15% 小さく描画していたが、
+  portable メトリクスでは Windows は macOS と 1px 以内で一致し、macOS の描画は旧メトリクスと
+  完全に同一（変化なし）。タイプフェース未指定のテキストは OS 既定のサンセリフ体
+  （macOS: Lucida Grande、Windows: Verdana）で描画され、書体は異なるがサイズは揃う。
 
 ## 8. 状態保存仕様（DAW プロジェクト）
 
@@ -381,6 +434,11 @@ Quick Save フォルダ、ズーム / スクロール位置、Undo 履歴。
 | Preview フィルタ固定 | カットオフ 2.6kHz 相当・レゾナンス 0.2（UI 非公開）。 |
 | try-lock スキップ | フレーズ差し替えと衝突したオーディオブロックは MIDI 生成を 1 ブロック分スキップする（実用上不可知）。 |
 | 未使用 API | `MidiExport::toMidiSequence()`（クリップボード用）は未使用。 |
+| Windows: Standalone 未配布 | Standalone はビルドされるが配布しない。PlayHead にトランスポート情報が来ずプラグインが無音になる既知不具合のため（macOS も同じ制約はあるが Standalone は配布している）。 |
+| Windows: シードの再現性 | 同じシードでも macOS と Windows で結果が異なりうる（`std::uniform_*_distribution` の実装は処理系依存）。 |
+| Windows: 未署名配布の警告 | コード署名していないため、インストール/アンインストール用 `.bat` 実行時に「発行元を確認できませんでした」/ SmartScreen の警告が出る。ユーザーは「実行」/「詳細情報 > 実行」を選ぶ必要がある。 |
+| Windows: OneDrive 上の空フォルダ | Documents が OneDrive にリダイレクトされている環境では、アンインストール時に空になった `Documents\EDEN` フォルダが削除されずに残ることがある（OneDrive の属性が原因、実害なし）。 |
+| Windows: 既定フォントの差異 | タイプフェース未指定のピアノロールラベル等は OS 既定フォントで描画されるため、macOS（Lucida Grande）と Windows（Verdana）で書体が異なる（サイズは §7.5 の修正により揃っている）。 |
 
 ## 10. ビルド
 
@@ -391,3 +449,21 @@ cmake --build build -j8
 
 成果物: `build/PsyMelody_artefacts/Release/`（Standalone / VST3 / AU）。
 `JUCE_WEB_BROWSER=0`、`JUCE_USE_CURL=0`、スプラッシュ非表示、推奨警告 + LTO 有効。
+
+### Windows ビルド・配布
+
+- 必要ツール: Visual Studio 2022 Build Tools（MSVC 14.44, x64）、Windows SDK 10.0.26100、
+  CMake 3.22+、Git。JUCE は macOS と同じ `../JUCE`（8.0.12）。
+- ビルドコマンド（リポジトリルートから）:
+  ```
+  cmake -B build -G "Visual Studio 17 2022" -A x64
+  cmake --build build --config Release
+  ```
+  成果物は `build\PsyMelody_artefacts\Release\VST3\PsyMelody.vst3`（Standalone .exe もビルドされるが配布しない）。JUCE が Windows では AU を自動的に除外する。
+- `CMakeLists.txt` の `if(MSVC)` ブロックで C/C++ ランタイムを静的リンク
+  （`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded...`）しており、Visual C++ 再頒布可能パッケージが
+  無くてもロードできる。同ブロックで `/utf-8` を付与し、日本語ロケール（CP932）の MSVC が
+  ソース中の UTF-8 記号（コメント内）で警告するのを防いでいる。
+- 配布物は署名なしの zip `PsyMelody_v0.1.3_Windows.zip`（VST3 バンドル、`Install_PsyMelody.bat` /
+  `Uninstall_PsyMelody.bat`、README、LICENSE）。`.bat` は未署名のため実行時に
+  Windows の警告が出る（§9）。SHA256 を GitHub リリースページで公開する。
