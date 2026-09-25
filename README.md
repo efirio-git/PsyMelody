@@ -39,14 +39,14 @@ PsyMelody is a MIDI generator plugin for Psytrance music production. It generate
 
 ### macOS
 
-1. Open the downloaded `PsyMelody_vX.Y.Z.dmg`
+1. Open the downloaded `PsyMelody_vX.Y.Z_Mac.dmg`
 2. Run `PsyMelody_Installer.pkg`
 3. Click **Customize** to select VST3 and/or AU
 4. Restart your DAW and rescan plugins
 
 ### Windows
 
-1. Download `PsyMelody_vX.Y.Z_Windows.zip`
+1. Download `PsyMelody_vX.Y.Z_Win.zip`
 2. Right-click the zip and choose **Extract All**
 3. In the extracted folder, double-click `Install_PsyMelody.bat`
 4. Allow administrator permission when Windows asks

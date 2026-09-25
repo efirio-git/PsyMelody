@@ -464,6 +464,6 @@ cmake --build build -j8
   （`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded...`）しており、Visual C++ 再頒布可能パッケージが
   無くてもロードできる。同ブロックで `/utf-8` を付与し、日本語ロケール（CP932）の MSVC が
   ソース中の UTF-8 記号（コメント内）で警告するのを防いでいる。
-- 配布物は署名なしの zip `PsyMelody_v0.1.3_Windows.zip`（VST3 バンドル、`Install_PsyMelody.bat` /
+- 配布物は署名なしの zip `PsyMelody_v0.1.3_Win.zip`（VST3 バンドル、`Install_PsyMelody.bat` /
   `Uninstall_PsyMelody.bat`、README、LICENSE）。`.bat` は未署名のため実行時に
   Windows の警告が出る（§9）。SHA256 を GitHub リリースページで公開する。
