@@ -8,11 +8,11 @@ public:
     // Custom fonts
     // Initialised with the system-font fallbacks; the constructor swaps in the
     // embedded typefaces when they load
-    juce::Font titleFont     = PsyMelody::legacyFont(22.0f, juce::Font::bold);  // Orbitron Bold - for "PsyMelody"
-    juce::Font sectionFont   = PsyMelody::legacyFont(10.0f, juce::Font::bold);  // Orbitron Regular - for section headers
-    juce::Font uiFont        = PsyMelody::legacyFont(13.0f);                    // Inter Medium - for labels, buttons
-    juce::Font uiFontBold    = PsyMelody::legacyFont(13.0f, juce::Font::bold);  // Inter Bold - for emphasis
-    juce::Font uiFontRegular = PsyMelody::legacyFont(12.0f);                    // Inter Regular - for values
+    juce::Font titleFont     = PsyMelody::makeFont(22.0f, juce::Font::bold);  // Orbitron Bold - for "PsyMelody"
+    juce::Font sectionFont   = PsyMelody::makeFont(10.0f, juce::Font::bold);  // Orbitron Regular - for section headers
+    juce::Font uiFont        = PsyMelody::makeFont(13.0f);                    // Inter Medium - for labels, buttons
+    juce::Font uiFontBold    = PsyMelody::makeFont(13.0f, juce::Font::bold);  // Inter Bold - for emphasis
+    juce::Font uiFontRegular = PsyMelody::makeFont(12.0f);                    // Inter Regular - for values
 
     PsyMelodyLookAndFeel()
     {
@@ -28,11 +28,11 @@ public:
         interBoldTf = juce::Typeface::createSystemTypefaceFor(
             BinaryData::InterBold_ttf, BinaryData::InterBold_ttfSize);
 
-        if (orbitronBoldTf) titleFont = PsyMelody::legacyFont(orbitronBoldTf).withHeight(22.0f);
-        if (orbitronRegTf) sectionFont = PsyMelody::legacyFont(orbitronRegTf).withHeight(10.0f);
-        if (interMedTf) uiFont = PsyMelody::legacyFont(interMedTf).withHeight(13.0f);
-        if (interBoldTf) uiFontBold = PsyMelody::legacyFont(interBoldTf).withHeight(13.0f);
-        if (interRegTf) uiFontRegular = PsyMelody::legacyFont(interRegTf).withHeight(12.0f);
+        if (orbitronBoldTf) titleFont = PsyMelody::makeFont(orbitronBoldTf).withHeight(22.0f);
+        if (orbitronRegTf) sectionFont = PsyMelody::makeFont(orbitronRegTf).withHeight(10.0f);
+        if (interMedTf) uiFont = PsyMelody::makeFont(interMedTf).withHeight(13.0f);
+        if (interBoldTf) uiFontBold = PsyMelody::makeFont(interBoldTf).withHeight(13.0f);
+        if (interRegTf) uiFontRegular = PsyMelody::makeFont(interRegTf).withHeight(12.0f);
 
         if (interRegTf)
             setDefaultSansSerifTypeface(interRegTf);

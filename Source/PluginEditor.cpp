@@ -134,7 +134,7 @@ void ParamLaneView::paint(juce::Graphics& g)
 
     // Label
     g.setColour(juce::Colour(0xffacaab1));
-    g.setFont(PsyMelody::legacyFont(9.0f));
+    g.setFont(PsyMelody::makeFont(9.0f));
     juce::String label;
     if (laneType == LaneType::Velocity) label = "VEL";
     else if (laneType == LaneType::Pan) label = "PAN  L|R";
@@ -260,7 +260,7 @@ void PianoRollView::paintOverChildren(juce::Graphics& g)
 
     // H / V labels
     g.setColour(juce::Colour(0xffacaab1).withAlpha(0.6f));
-    g.setFont(PsyMelody::legacyFont(8.0f, juce::Font::bold));
+    g.setFont(PsyMelody::makeFont(8.0f, juce::Font::bold));
     g.drawText("H", zoomOutXBtn.getX() - 11, zoomOutXBtn.getY(), 10, zoomOutXBtn.getHeight(),
                juce::Justification::centred);
     g.drawText("V", zoomOutYBtn.getX() - 11, zoomOutYBtn.getY(), 10, zoomOutYBtn.getHeight(),
@@ -628,7 +628,7 @@ void PianoRollView::paint(juce::Graphics& g)
     g.drawVerticalLine((int)pianoLabelMargin, 0.0f, bounds.getHeight());
 
     // Note labels on keys
-    g.setFont(PsyMelody::legacyFont(9.0f));
+    g.setFont(PsyMelody::makeFont(9.0f));
     for (int n = lowestNote; n <= highestNote; ++n) {
         float y = yForNote(n);
         if (y > bounds.getHeight() || y + nh < 0) continue;
@@ -645,7 +645,7 @@ void PianoRollView::paint(juce::Graphics& g)
         if (x < -1 || x > bounds.getWidth()+1) continue;
         if (b%4==0) {
             g.setColour(barLineColour.withAlpha(0.3f)); g.drawLine(x,0,x,bounds.getHeight(),1.0f);
-            g.setColour(juce::Colour(0xffacaab1)); g.setFont(PsyMelody::legacyFont(9.0f));
+            g.setColour(juce::Colour(0xffacaab1)); g.setFont(PsyMelody::makeFont(9.0f));
             g.drawText(juce::String(b/4+1),(int)x+2,0,20,12,juce::Justification::centredLeft);
         } else { g.setColour(juce::Colour(0xff48474d).withAlpha(0.10f)); g.drawLine(x,0,x,bounds.getHeight(),0.5f); }
     }
@@ -674,7 +674,7 @@ void PianoRollView::paint(juce::Graphics& g)
         g.fillRect(x,y,w,h);
     }
 
-    float ly = bounds.getHeight()-14; g.setFont(PsyMelody::legacyFont(9.0f));
+    float ly = bounds.getHeight()-14; g.setFont(PsyMelody::makeFont(9.0f));
     auto dl=[&](float lx,juce::Colour c,const juce::String& t){
         g.setColour(c); g.fillRect(lx,ly,8.0f,8.0f);
         g.setColour(juce::Colour(0xffacaab1)); g.drawText(t,(int)lx+10,(int)ly-1,50,12,juce::Justification::centredLeft);
@@ -1274,7 +1274,7 @@ PsyMelodyEditor::PsyMelodyEditor(PsyMelodyProcessor& p)
     addAndMakeVisible(previewWaveSelector);
 
     previewWaveLabel.setText("OSC", juce::dontSendNotification);
-    previewWaveLabel.setFont(PsyMelody::legacyFont(12.0f));
+    previewWaveLabel.setFont(PsyMelody::makeFont(12.0f));
     previewWaveLabel.setColour(juce::Label::textColourId, juce::Colour(0xffcccccc));
     previewWaveLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(previewWaveLabel);
@@ -2212,7 +2212,7 @@ void PsyMelodyEditor::paintOverChildren(juce::Graphics& g)
             g.fillPath(head);
 
             auto labelRect = juce::Rectangle<int>(cx - 20, iconY + 30, 40, 12);
-            g.setFont(PsyMelody::legacyFont(9.0f));
+            g.setFont(PsyMelody::makeFont(9.0f));
             g.drawText(isUndo ? "UNDO" : "REDO",
                        labelRect, juce::Justification::centredTop);
         };

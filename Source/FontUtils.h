@@ -3,28 +3,33 @@
 
 namespace PsyMelody {
 
-// JUCE 8 deprecated the juce::Font(float ...), Font(name, ...) and
-// Font(Typeface::Ptr) constructors. Internally they build a FontOptions with
-// TypefaceMetricsKind::legacy, whereas FontOptions defaults to the "portable"
-// metrics, which lays text out at a different size. These helpers keep the
-// legacy metrics so text renders exactly as before without the deprecated API.
+// Font construction for the whole UI. JUCE 8 deprecated the juce::Font(float),
+// Font(name, ...) and Font(Typeface::Ptr) constructors; these helpers build the
+// font from FontOptions with the "portable" metrics kind instead.
+//
+// Metrics kind matters for Windows. The deprecated constructors used the legacy
+// kind, which takes metrics from the platform: on Windows the embedded Inter
+// and Yu Gothic then render about 15% smaller than on macOS. Portable metrics
+// are the same on every platform, and on macOS they are identical to the
+// legacy ones for every font this UI uses (Inter, Orbitron, Lucida Grande,
+// Hiragino), so macOS - the reference look - is unchanged.
 
-inline juce::Font legacyFont(float height, int styleFlags = juce::Font::plain)
+inline juce::Font makeFont(float height, int styleFlags = juce::Font::plain)
 {
     return juce::Font(juce::FontOptions(height, styleFlags)
-                          .withMetricsKind(juce::TypefaceMetricsKind::legacy));
+                          .withMetricsKind(juce::TypefaceMetricsKind::portable));
 }
 
-inline juce::Font legacyFont(const juce::String& typefaceName, float height, int styleFlags)
+inline juce::Font makeFont(const juce::String& typefaceName, float height, int styleFlags)
 {
     return juce::Font(juce::FontOptions(typefaceName, height, styleFlags)
-                          .withMetricsKind(juce::TypefaceMetricsKind::legacy));
+                          .withMetricsKind(juce::TypefaceMetricsKind::portable));
 }
 
-inline juce::Font legacyFont(const juce::Typeface::Ptr& typeface)
+inline juce::Font makeFont(const juce::Typeface::Ptr& typeface)
 {
     return juce::Font(juce::FontOptions(typeface)
-                          .withMetricsKind(juce::TypefaceMetricsKind::legacy));
+                          .withMetricsKind(juce::TypefaceMetricsKind::portable));
 }
 
 // Same measurement as the deprecated Font::getStringWidthFloat: the sum of the
