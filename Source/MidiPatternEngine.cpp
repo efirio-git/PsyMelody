@@ -36,6 +36,7 @@ void MidiPatternEngine::reset()
     activeNotes.clear();
     flushActiveNotes = false;
     lastPanCC = -1;
+    hasExpectedNextBeat = false;
 }
 
 void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
@@ -64,6 +65,7 @@ void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
         for (const auto& active : activeNotes)
             sendNoteOff(midiBuffer, active, 0);
         activeNotes.clear();
+        hasExpectedNextBeat = false;
         return;
     }
 
@@ -71,6 +73,17 @@ void MidiPatternEngine::processBlock(juce::MidiBuffer& midiBuffer,
     double beatsPerSample = bpm / (60.0 * sampleRate);
     double blockStartBeat = ppqPosition;
     double blockEndBeat = ppqPosition + numSamples * beatsPerSample;
+
+    // Transport jump (DAW loop wrap, locate, scrub): sounding notes may never
+    // reach their end position again - e.g. a 2-bar DAW loop over a 4-bar
+    // phrase never plays past bar 2 - so they would hang. Stop them first.
+    if (hasExpectedNextBeat && std::abs(blockStartBeat - expectedNextBeat) > jumpToleranceBeats) {
+        for (const auto& active : activeNotes)
+            sendNoteOff(midiBuffer, active, 0);
+        activeNotes.clear();
+    }
+    expectedNextBeat = blockEndBeat;
+    hasExpectedNextBeat = true;
 
     // Loop position within phrase
     auto loopPos = [phraseLen](double beat) -> double {
