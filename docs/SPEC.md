@@ -1,7 +1,7 @@
 # PsyMelody 仕様書
 
-対象バージョン: v0.1.3（Windows 対応 + 不具合修正）
-最終更新: 2026-09-25
+対象バージョン: v0.1.4（Ableton Live で VST3 が読み込めない不具合の修正）
+最終更新: 2026-10-26
 
 ---
 
@@ -14,8 +14,8 @@ MIDI メロディ／ベースライン／コードボイシング生成プラグ
 |---|---|
 | フレームワーク | JUCE（C++17、CMake 3.22+） |
 | フォーマット | macOS: Standalone / VST3 / AU（配布は全フォーマット）。Windows 10/11 x64: VST3 のみを配布（Standalone はビルドされるが未配布・トランスポート非対応で無音のため。§9 参照） |
-| プラグイン種別 | `IS_SYNTH=TRUE`、MIDI 出力あり（`producesMidi`）、MIDI 入力なし |
-| バス構成 | ステレオ出力のみ（入力なし） |
+| プラグイン種別 | `IS_SYNTH=TRUE`、MIDI 出力あり（`producesMidi`）、MIDI 入力あり（`acceptsMidi`。受け取った MIDI は使わずに破棄する。Ableton Live は MIDI 入力のない Instrument 種別の VST3 を読み込まないため、v0.1.4 で追加） |
+| バス構成 | 音声: ステレオ出力のみ（入力なし）。MIDI: 入力 1・出力 1 |
 | 開発元 | EDEN（manufacturer code `PsyM` / plugin code `PsMl`） |
 | ライセンス | AGPLv3 |
 | ウィンドウ | 960 × 720 固定（リサイズ不可） |
@@ -449,6 +449,9 @@ cmake --build build -j8
 
 成果物: `build/PsyMelody_artefacts/Release/`（Standalone / VST3 / AU）。
 `JUCE_WEB_BROWSER=0`、`JUCE_USE_CURL=0`、スプラッシュ非表示、推奨警告 + LTO 有効。
+macOS では VST3 のビルドの最後に ad-hoc 署名し直す（`CMakeLists.txt` の `if(APPLE)` ブロック）。
+JUCE は署名の後に `moduleinfo.json` を書き出すため、そのままでは署名が無効になり、
+Ableton Live のプラグインスキャンで読み込みを拒否される（v0.1.3 までの不具合）。
 
 ### Windows ビルド・配布
 
@@ -464,6 +467,6 @@ cmake --build build -j8
   （`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded...`）しており、Visual C++ 再頒布可能パッケージが
   無くてもロードできる。同ブロックで `/utf-8` を付与し、日本語ロケール（CP932）の MSVC が
   ソース中の UTF-8 記号（コメント内）で警告するのを防いでいる。
-- 配布物は署名なしの zip `PsyMelody_v0.1.3_Win.zip`（VST3 バンドル、`Install_PsyMelody.bat` /
+- 配布物は署名なしの zip `PsyMelody_v0.1.4_Win.zip`（VST3 バンドル、`Install_PsyMelody.bat` /
   `Uninstall_PsyMelody.bat`、README、LICENSE）。`.bat` は未署名のため実行時に
   Windows の警告が出る（§9）。SHA256 を GitHub リリースページで公開する。

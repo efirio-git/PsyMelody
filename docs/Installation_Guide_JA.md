@@ -1,4 +1,4 @@
-# PsyMelody v0.1.3 - 導入手順書
+# PsyMelody v0.1.4 - 導入手順書
 ## Psytrance Melody Generator by EDEN
 
 ---
@@ -9,7 +9,7 @@
 
 #### インストーラーを使用（推奨）
 
-1. `PsyMelody_v0.1.3_Mac.dmg` を開く
+1. `PsyMelody_v0.1.4_Mac.dmg` を開く
 2. `PsyMelody_Installer.pkg` をダブルクリック
 3. 画面の指示に従ってインストール
 4. **カスタマイズ** をクリックしてインストールするフォーマットを選択:
@@ -38,7 +38,7 @@ Studio One、Bitwig、REAPER など）。Windows 版は VST3 のみで、Standal
 
 #### インストーラーを使用（推奨）
 
-1. `PsyMelody_v0.1.3_Win.zip` を右クリックして **すべて展開** を選ぶ
+1. `PsyMelody_v0.1.4_Win.zip` を右クリックして **すべて展開** を選ぶ
 2. 展開したフォルダの `Install_PsyMelody.bat` をダブルクリック
 3. 管理者権限の確認が出たら「はい」を選ぶ
 4. DAW を再起動し、プラグインを再スキャンする
@@ -306,4 +306,4 @@ Windowsでは、これらのDAWは標準でVST3システムフォルダ
 
 ---
 
-*PsyMelody v0.1.3 - Copyright (c) 2026 EDEN*
+*PsyMelody v0.1.4 - Copyright (c) 2026 EDEN*

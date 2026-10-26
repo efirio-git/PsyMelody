@@ -1,4 +1,4 @@
-# PsyMelody v0.1.3 - Installation Guide
+# PsyMelody v0.1.4 - Installation Guide
 ## Psytrance Melody Generator by EDEN
 
 ---
@@ -9,7 +9,7 @@
 
 #### Using the Installer (Recommended)
 
-1. Open `PsyMelody_v0.1.3_Mac.dmg`
+1. Open `PsyMelody_v0.1.4_Mac.dmg`
 2. Double-click `PsyMelody_Installer.pkg`
 3. Follow the on-screen instructions
 4. Click **Customize** to select which formats to install:
@@ -39,7 +39,7 @@ not included on Windows.
 
 #### Using the Installer (Recommended)
 
-1. Right-click `PsyMelody_v0.1.3_Win.zip` and choose **Extract All**
+1. Right-click `PsyMelody_v0.1.4_Win.zip` and choose **Extract All**
 2. In the extracted folder, double-click `Install_PsyMelody.bat`
 3. Allow administrator permission when Windows asks
 4. Restart your DAW and rescan plugins
@@ -320,4 +320,4 @@ PsyMelody includes a built-in preview synthesizer so you can hear melodies witho
 
 ---
 
-*PsyMelody v0.1.3 - Copyright (c) 2026 EDEN*
+*PsyMelody v0.1.4 - Copyright (c) 2026 EDEN*
